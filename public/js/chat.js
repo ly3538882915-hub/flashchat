@@ -1942,8 +1942,8 @@
 
       item.appendChild(info);
 
-      // V0.6 新增：管理员操作按钮
-      if (!isAdmin(user)) {
+      // V0.6 新增：管理员操作按钮（不能对自己操作）
+      if (user.id !== currentUser.id) {
         var actions = document.createElement('div');
         actions.className = 'admin-user-actions';
 
