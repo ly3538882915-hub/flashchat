@@ -1,7 +1,8 @@
 /**
- * FlashChat Web V0.2 - 聊天主界面逻辑
+ * FlashChat Web V0.7 - 聊天主界面逻辑
  * Socket.IO 连接、消息收发、会话管理、UI 交互
  * V0.2 新增：emoji 面板、滚动到底部按钮、消息分组、已读回执、发送按钮图标切换、staggered 动画
+ * V0.7 新增：主题切换、管理员上线通知、图片/表情/动图发送、左滑删除会话、手机端返回导航、会员系统、超管任命、关于页面
  */
 
 (function () {
@@ -31,19 +32,33 @@
   // 常用 Emoji 数据（50+，纯 JS 实现，不依赖外部库）
   // ============================================================
   const EMOJIS = [
-    '😀', '😁', '😂', '🤣', '😃', '😄', '😅', '😆',
-    '😉', '😊', '😋', '😎', '😍', '😘', '🥰', '😗',
-    '🤗', '🤩', '🤔', '🤨', '😐', '😑', '😶', '🙄',
-    '😏', '😣', '😥', '😮', '🤐', '😯', '😪', '😫',
-    '🥱', '😴', '😌', '😛', '😜', '😝', '🤤', '😒',
-    '😓', '😔', '😕', '🙃', '🤑', '😲', '☹️', '🙁',
-    '😖', '😞', '😟', '😤', '😢', '😭', '😦', '😧',
-    '😨', '😩', '🤯', '😬', '😰', '😱', '🥳', '🥺',
-    '😎', '🤓', '🧐', '😢', '👍', '👎', '👌', '✌️',
-    '🤞', '🤟', '🤘', '👏', '🙌', '👐', '🤲', '🙏',
-    '💪', '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤',
-    '🤍', '🤎', '💔', '❣️', '💕', '💞', '💓', '💗',
-    '💖', '💘', '💝', '🔥', '⭐', '🌟', '✨', '⚡',
+    '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣',
+    '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '😘',
+    '😗', '😙', '😚', '😋', '😛', '😝', '😜', '🤪',
+    '🤨', '🧐', '🤓', '😎', '🤩', '😏', '😒', '😞',
+    '😔', '😟', '😕', '🙁', '☹️', '😣', '😖', '😫',
+    '😩', '🥺', '😢', '😭', '😤', '😠', '😡', '🤬',
+    '😳', '🥵', '🥶', '😱', '😨', '😰', '😥', '😓',
+    '🤗', '🤔', '🤭', '🤫', '🤥', '😶', '😐', '😑',
+    '😬', '🙄', '😯', '😦', '😧', '😮', '😲', '😴',
+    '🤤', '😪', '😵', '🤐', '🥴', '🤢', '🤮', '🤧',
+    '😷', '🤒', '🤕', '🤑', '🤠', '😈', '👿', '👹',
+    '👺', '🤡', '💩', '👻', '💀', '☠️', '👽', '👾',
+    '🤖', '🎃', '😺', '😸', '😹', '😻', '😼', '😽',
+    '🙀', '😿', '😾', '👍', '👎', '👌', '✌️', '🤞',
+    '🤟', '🤘', '👏', '🙌', '👐', '🤲', '🙏', '💪',
+    '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍',
+    '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖',
+    '💘', '💝', '🔥', '⭐', '🌟', '✨', '⚡',
+  ];
+
+  // V0.7 新增：内置动图列表（使用 CSS 动画标识，前端渲染动画效果）
+  const STICKERS = [
+    { id: 's1', name: '旋转表情', icon: '😵', cssClass: 'sticker-spin' },
+    { id: 's2', name: '跳动爱心', icon: '💗', cssClass: 'sticker-heartbeat' },
+    { id: 's3', name: '抖动文字', icon: '😱', cssClass: 'sticker-shake' },
+    { id: 's4', name: '弹跳表情', icon: '🤩', cssClass: 'sticker-bounce' },
+    { id: 's5', name: '脉冲星星', icon: '⭐', cssClass: 'sticker-pulse' },
   ];
 
   // ============================================================
@@ -218,6 +233,34 @@
     confirmInviteBtn: document.getElementById('confirm-invite-btn'),
     // V0.66 新增：info-btn 按钮
     infoBtn: document.getElementById('info-btn'),
+    // V0.7 新增：主题切换按钮
+    themeToggleBtn: document.getElementById('theme-toggle-btn'),
+    // V0.7 新增：附件菜单
+    attachMenu: document.getElementById('attach-menu'),
+    attachPhotoBtn: document.getElementById('attach-photo-btn'),
+    attachEmojiBtn: document.getElementById('attach-emoji-btn'),
+    attachStickerBtn: document.getElementById('attach-sticker-btn'),
+    imageFileInput: document.getElementById('image-file-input'),
+    // V0.7 新增：表情/动图面板 Tab
+    emojiTabContent: document.getElementById('emoji-tab-content'),
+    stickerTabContent: document.getElementById('sticker-tab-content'),
+    stickerGrid: document.getElementById('sticker-grid'),
+    // V0.7 新增：关于弹窗
+    aboutBtn: document.getElementById('about-btn'),
+    aboutModal: document.getElementById('about-modal'),
+    closeAboutBtn: document.getElementById('close-about-btn'),
+    // V0.7 新增：图片预览
+    imagePreviewModal: document.getElementById('image-preview-modal'),
+    imagePreviewImg: document.getElementById('image-preview-img'),
+    closeImagePreviewBtn: document.getElementById('close-image-preview-btn'),
+    // V0.7 新增：管理员上线通知
+    adminOnlineBanner: document.getElementById('admin-online-banner'),
+    adminOnlineText: document.getElementById('admin-online-text'),
+    // V0.7 新增：会员信息
+    membershipBadge: document.getElementById('membership-badge'),
+    membershipColorPicker: document.getElementById('membership-color-picker'),
+    membershipColorInput: document.getElementById('membership-color-input'),
+    saveMembershipColorBtn: document.getElementById('save-membership-color-btn'),
   };
 
   // ============================================================
@@ -325,6 +368,77 @@
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  /**
+   * V0.7 新增：根据会员等级获取名字的 CSS class
+   * crown -> 金色闪烁，platinum -> 自定义/银色，free -> 默认
+   */
+  function getMembershipClass(membership) {
+    if (membership === 'crown') return 'crown-member';
+    if (membership === 'platinum') return 'platinum-member';
+    return '';
+  }
+
+  /**
+   * V0.7 新增：根据会员等级获取内联样式（用于 platinum 自定义颜色）
+   */
+  function getMembershipStyle(membership, membershipColor) {
+    if (membership === 'platinum' && membershipColor) {
+      return `color: ${membershipColor};`;
+    }
+    return '';
+  }
+
+  /**
+   * V0.7 新增：为昵称元素添加会员样式
+   * @param {HTMLElement} el - 目标元素
+   * @param {string} membership - 会员等级
+   * @param {string|null} membershipColor - 自定义颜色
+   */
+  function applyMembershipStyle(el, membership, membershipColor) {
+    if (!el) return;
+    el.classList.remove('crown-member', 'platinum-member');
+    el.style.color = '';
+    el.style.cssText = '';
+    if (membership === 'crown') {
+      el.classList.add('crown-member');
+    } else if (membership === 'platinum') {
+      el.classList.add('platinum-member');
+      if (membershipColor) {
+        el.style.setProperty('--platinum-color', membershipColor);
+      }
+    }
+  }
+
+  /**
+   * V0.7 新增：判断是否为手机端
+   */
+  function isMobile() {
+    return window.innerWidth < 768;
+  }
+
+  /**
+   * V0.7 新增：主题切换
+   */
+  function initTheme() {
+    const savedTheme = localStorage.getItem('fc_theme') || 'light';
+    applyTheme(savedTheme);
+  }
+
+  function applyTheme(theme) {
+    if (theme === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+    localStorage.setItem('fc_theme', theme);
+  }
+
+  function toggleTheme() {
+    const currentTheme = localStorage.getItem('fc_theme') || 'light';
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    applyTheme(newTheme);
   }
 
   /** 涟漪效果 */
@@ -537,6 +651,78 @@
         openGroupInfo(data.conversationId);
       }
     });
+
+    // V0.7 新增：管理员上线通知
+    state.socket.on('admin_online', (data) => {
+      showAdminOnlineBanner(data.adminNickname || '管理员');
+    });
+
+    // V0.7 新增：被任命为超管
+    state.socket.on('admin_promoted', (data) => {
+      showToast(data.message || '您已被任命为超管', 'success');
+      // 刷新当前用户信息
+      refreshCurrentUser();
+    });
+
+    // V0.7 新增：超管身份被撤销
+    state.socket.on('admin_demoted', (data) => {
+      showToast(data.message || '您的超管身份已被撤销', 'info');
+      refreshCurrentUser();
+    });
+  }
+
+  // V0.7 新增：刷新当前用户信息
+  async function refreshCurrentUser() {
+    try {
+      const res = await apiFetch('/api/me');
+      const data = await res.json();
+      if (data.user) {
+        currentUser = data.user;
+        localStorage.setItem('fc_user', JSON.stringify(currentUser));
+        updateMyInfo();
+        // 更新设置弹窗中的会员信息
+        updateMembershipDisplay();
+      }
+    } catch (err) {
+      console.error('刷新用户信息失败:', err);
+    }
+  }
+
+  // V0.7 新增：显示管理员上线通知横幅
+  function showAdminOnlineBanner(nickname) {
+    if (!el.adminOnlineBanner || !el.adminOnlineText) return;
+    el.adminOnlineText.textContent = '管理员 ' + nickname + ' 已上线';
+    el.adminOnlineBanner.style.display = 'flex';
+    // 触发抖动动画
+    el.adminOnlineBanner.classList.remove('shake-banner');
+    void el.adminOnlineBanner.offsetWidth;
+    el.adminOnlineBanner.classList.add('shake-banner');
+    // 2秒后自动消失
+    setTimeout(() => {
+      el.adminOnlineBanner.style.display = 'none';
+      el.adminOnlineBanner.classList.remove('shake-banner');
+    }, 2000);
+  }
+
+  // V0.7 新增：更新会员信息显示
+  function updateMembershipDisplay() {
+    const membership = currentUser.membership || 'free';
+    const membershipLabels = {
+      'free': '免费用户',
+      'platinum': '铂金会员',
+      'crown': '皇冠会员',
+    };
+    if (el.membershipBadge) {
+      el.membershipBadge.textContent = membershipLabels[membership] || '免费用户';
+      el.membershipBadge.className = 'membership-badge membership-' + membership;
+    }
+    // 铂金会员显示颜色选择器
+    if (el.membershipColorPicker) {
+      el.membershipColorPicker.style.display = membership === 'platinum' ? 'block' : 'none';
+      if (membership === 'platinum' && currentUser.membershipColor) {
+        el.membershipColorInput.value = currentUser.membershipColor;
+      }
+    }
   }
 
   // ============================================================
@@ -587,6 +773,11 @@
     if (conv.id === state.currentConvId) item.classList.add('active');
     item.dataset.convId = conv.id;
 
+    // V0.7 新增：置顶标识
+    if (conv.isPinned) {
+      item.classList.add('pinned');
+    }
+
     const avatar = createAvatar(conv.name, conv.avatarColor, null, conv.otherAvatarUrl);
     item.appendChild(avatar);
 
@@ -599,6 +790,18 @@
     const name = document.createElement('div');
     name.className = 'conv-item-name';
     name.textContent = conv.name || '(未命名)';
+    // V0.7 新增：应用会员颜色
+    applyMembershipStyle(name, conv.otherMembership, conv.otherMembershipColor);
+
+    // V0.7 新增：置顶小图标
+    if (conv.isPinned) {
+      const pinIcon = document.createElement('span');
+      pinIcon.className = 'pin-icon';
+      pinIcon.innerHTML = '📌';
+      pinIcon.title = '已置顶';
+      name.appendChild(pinIcon);
+    }
+
     top.appendChild(name);
 
     const time = document.createElement('div');
@@ -615,7 +818,14 @@
     lastMsg.className = 'conv-item-last';
     if (conv.lastMessage) {
       const prefix = conv.lastMessage.senderId === currentUser.id ? '你: ' : '';
-      lastMsg.textContent = prefix + conv.lastMessage.content;
+      // V0.7 新增：图片消息显示[图片]
+      let lastContent = conv.lastMessage.content;
+      if (conv.lastMessage.type === 'image') {
+        lastContent = '[图片]';
+      } else if (conv.lastMessage.type === 'sticker') {
+        lastContent = '[动图]';
+      }
+      lastMsg.textContent = prefix + lastContent;
     } else {
       lastMsg.textContent = '暂无消息';
     }
@@ -631,11 +841,169 @@
     body.appendChild(bottom);
     item.appendChild(body);
 
+    // V0.7 新增：左滑操作菜单容器
+    const swipeActions = document.createElement('div');
+    swipeActions.className = 'swipe-actions';
+    swipeActions.innerHTML =
+      '<button class="swipe-action-btn pin" data-action="pin">置顶</button>' +
+      '<button class="swipe-action-btn unread" data-action="unread">未读</button>' +
+      '<button class="swipe-action-btn delete" data-action="delete">删除</button>';
+    item.appendChild(swipeActions);
+
     item.addEventListener('click', () => {
+      // V0.7 新增：如果正在滑动状态，不触发点击
+      if (item.classList.contains('swiped')) {
+        closeSwipeItem(item);
+        return;
+      }
       openConversation(conv.id);
     });
 
+    // V0.7 新增：绑定左滑操作按钮事件
+    swipeActions.querySelectorAll('.swipe-action-btn').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var action = btn.getAttribute('data-action');
+        handleSwipeAction(action, conv.id, item);
+      });
+    });
+
+    // V0.7 新增：绑定触摸滑动事件
+    bindSwipeEvents(item);
+
     return item;
+  }
+
+  // V0.7 新增：左滑操作处理
+  function handleSwipeAction(action, convId, item) {
+    if (action === 'pin') {
+      togglePinConversation(convId);
+    } else if (action === 'unread') {
+      markConversationUnread(convId);
+    } else if (action === 'delete') {
+      if (confirm('确定删除此会话吗？（不会删除好友关系）')) {
+        deleteConversation(convId);
+      }
+    }
+    closeSwipeItem(item);
+  }
+
+  // V0.7 新增：绑定触摸滑动事件
+  function bindSwipeEvents(item) {
+    var startX = 0;
+    var currentX = 0;
+    var isDragging = false;
+
+    item.addEventListener('touchstart', function(e) {
+      startX = e.touches[0].clientX;
+      isDragging = true;
+    }, { passive: true });
+
+    item.addEventListener('touchmove', function(e) {
+      if (!isDragging) return;
+      currentX = e.touches[0].clientX;
+      var diff = currentX - startX;
+      // 仅左滑（diff < 0）
+      if (diff < 0) {
+        var offset = Math.max(diff, -140);
+        item.style.transform = 'translateX(' + offset + 'px)';
+      } else if (item.classList.contains('swiped')) {
+        // 右滑关闭
+        item.style.transform = 'translateX(' + Math.min(diff - 140, 0) + 'px)';
+      }
+    }, { passive: true });
+
+    item.addEventListener('touchend', function(e) {
+      if (!isDragging) return;
+      isDragging = false;
+      var diff = currentX - startX;
+      if (diff < -100) {
+        // 滑动超过100px，显示操作菜单
+        item.classList.add('swiped');
+        item.style.transform = 'translateX(-140px)';
+      } else if (item.classList.contains('swiped') && diff > 50) {
+        // 右滑关闭菜单
+        closeSwipeItem(item);
+      } else {
+        // 回弹
+        if (item.classList.contains('swiped')) {
+          item.style.transform = 'translateX(-140px)';
+        } else {
+          item.style.transform = '';
+        }
+      }
+    }, { passive: true });
+  }
+
+  // V0.7 新增：关闭滑动状态
+  function closeSwipeItem(item) {
+    item.classList.remove('swiped');
+    item.style.transform = '';
+  }
+
+  // V0.7 新增：置顶/取消置顶会话
+  async function togglePinConversation(convId) {
+    var conv = state.conversations.find(function(c) { return c.id === convId; });
+    if (!conv) return;
+    try {
+      var url = conv.isPinned
+        ? '/api/conversations/' + convId + '/unpin'
+        : '/api/conversations/' + convId + '/pin';
+      var res = await apiFetch(url, { method: 'POST' });
+      if (!res.ok) {
+        var data = await res.json();
+        showToast(data.error || '操作失败', 'error');
+        return;
+      }
+      conv.isPinned = !conv.isPinned;
+      showToast(conv.isPinned ? '已置顶' : '已取消置顶', 'success');
+      loadConversations();
+    } catch (err) {
+      showToast('操作失败', 'error');
+    }
+  }
+
+  // V0.7 新增：标为未读
+  function markConversationUnread(convId) {
+    var conv = state.conversations.find(function(c) { return c.id === convId; });
+    if (conv) {
+      conv.unreadCount = (conv.unreadCount || 0) + 1;
+      renderConversationList();
+      showToast('已标为未读', 'info');
+    }
+  }
+
+  // V0.7 新增：删除会话
+  async function deleteConversation(convId) {
+    try {
+      var res = await apiFetch('/api/conversations/' + convId, { method: 'DELETE' });
+      if (!res.ok) {
+        var data = await res.json();
+        showToast(data.error || '删除失败', 'error');
+        return;
+      }
+      showToast('会话已删除', 'success');
+      // 从列表中移除
+      state.conversations = state.conversations.filter(function(c) { return c.id !== convId; });
+      // 如果当前正在查看该会话，返回空状态
+      if (state.currentConvId === convId) {
+        goBackToList();
+      }
+      renderConversationList();
+    } catch (err) {
+      showToast('删除失败', 'error');
+    }
+  }
+
+  // V0.7 新增：返回到会话列表（手机端）
+  function goBackToList() {
+    el.chatContent.classList.remove('mobile-show');
+    state.socket.emit('leave_conversation');
+    state.currentConvId = null;
+    state.currentConv = null;
+    state.messages = [];
+    el.chatContent.style.display = 'none';
+    el.chatEmpty.style.display = 'flex';
   }
 
   /** 更新会话列表中的某一项（新消息/未读变更后） */
@@ -701,6 +1069,8 @@
 
       if (conv) {
         el.headerName.textContent = conv.name || '(未命名)';
+        // V0.7 新增：应用会员颜色到头部名称
+        applyMembershipStyle(el.headerName, conv.otherMembership, conv.otherMembershipColor);
         // V0.66 新增：私聊会话显示对方头像，群聊显示默认头像
         // 先清除之前可能设置的背景图片和背景色
         el.headerAvatar.style.background = '';
@@ -855,14 +1225,53 @@
       senderName.className = 'message-sender';
       const sender = msg.sender || state.memberCache.get(msg.senderId);
       senderName.textContent = sender ? sender.nickname : '未知用户';
+      // V0.7 新增：应用会员颜色
+      if (sender) {
+        applyMembershipStyle(senderName, sender.membership, sender.membershipColor);
+      }
       bubble.appendChild(senderName);
     }
 
-    // 消息内容
-    const content = document.createElement('span');
-    content.className = 'message-content';
-    content.innerHTML = escapeHtml(msg.content).replace(/\n/g, '<br>');
-    bubble.appendChild(content);
+    // V0.7 新增：消息内容根据类型渲染
+    const msgType = msg.type || 'text';
+    if (msgType === 'image') {
+      // 图片消息
+      const imgContainer = document.createElement('div');
+      imgContainer.className = 'message-image-container';
+      const img = document.createElement('img');
+      img.className = 'message-image';
+      img.src = msg.content;
+      img.alt = '图片';
+      img.loading = 'lazy';
+      img.addEventListener('click', function() {
+        openImagePreview(msg.content);
+      });
+      imgContainer.appendChild(img);
+      bubble.appendChild(imgContainer);
+    } else if (msgType === 'sticker') {
+      // 动图消息（CSS动画渲染）
+      const stickerContainer = document.createElement('div');
+      stickerContainer.className = 'message-sticker-container';
+      // 从 content 中解析动图标识
+      var stickerData = null;
+      try {
+        stickerData = JSON.parse(msg.content);
+      } catch(e) {
+        // 如果不是 JSON，尝试用 content 作为 cssClass
+        stickerData = { cssClass: msg.content, icon: '🎨' };
+      }
+      var stickerEl = document.createElement('div');
+      stickerEl.className = 'message-sticker ' + (stickerData.cssClass || '');
+      stickerEl.textContent = stickerData.icon || '🎨';
+      stickerContainer.appendChild(stickerEl);
+      bubble.appendChild(stickerContainer);
+    } else {
+      // 文本消息
+      const content = document.createElement('span');
+      content.className = 'message-content';
+      content.innerHTML = escapeHtml(msg.content).replace(/\n/g, '<br>');
+      bubble.appendChild(content);
+    }
 
     // 时间戳 + 已读回执（在气泡内右下角）
     const meta = document.createElement('span');
@@ -926,6 +1335,7 @@
         conv.unreadCount = (conv.unreadCount || 0) + 1;
         conv.lastMessage = {
           content: message.content,
+          type: message.type || 'text',
           senderId: message.senderId,
           createdAt: message.createdAt,
         };
@@ -945,12 +1355,26 @@
     }
     conv.lastMessage = {
       content: message.content,
+      type: message.type || 'text',
       senderId: message.senderId,
       createdAt: message.createdAt,
     };
-    // 重新排序：把该会话移到最前
+    // 重新排序：把该会话移到最前（但置顶会话保持在顶部）
     state.conversations = state.conversations.filter((c) => c.id !== conv.id);
-    state.conversations.unshift(conv);
+    // 找到第一个非置顶会话的位置
+    var insertIndex = 0;
+    for (var i = 0; i < state.conversations.length; i++) {
+      if (state.conversations[i].isPinned) {
+        insertIndex = i + 1;
+      } else {
+        break;
+      }
+    }
+    if (conv.isPinned) {
+      state.conversations.unshift(conv);
+    } else {
+      state.conversations.splice(insertIndex, 0, conv);
+    }
     renderConversationList();
   }
 
@@ -1075,6 +1499,100 @@
     );
   }
 
+  // V0.7 新增：发送图片消息
+  async function sendImageMessage(imageUrl) {
+    if (!state.currentConvId || !imageUrl) return;
+    try {
+      var res = await apiFetch('/api/conversations/' + state.currentConvId + '/image', {
+        method: 'POST',
+        body: JSON.stringify({ imageUrl: imageUrl }),
+      });
+      var data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || '发送图片失败', 'error');
+        return;
+      }
+      // 服务器已通过 Socket.IO 推送消息，这里确保本地显示
+      if (data.message) {
+        var exists = document.querySelector('[data-msg-id="' + data.message.id + '"]');
+        if (!exists) {
+          handleNewMessage(data.message);
+        }
+      }
+    } catch (err) {
+      console.error('发送图片失败:', err);
+      showToast('发送图片失败', 'error');
+    }
+  }
+
+  // V0.7 新增：上传图片并发送
+  async function uploadAndSendImage(file) {
+    if (!file || !state.currentConvId) return;
+    // 验证文件大小（10MB）
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('图片大小不能超过10MB', 'error');
+      return;
+    }
+    var formData = new FormData();
+    formData.append('image', file);
+    try {
+      var res = await fetch('/api/upload/image', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token },
+        body: formData,
+      });
+      var data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || '上传图片失败', 'error');
+        return;
+      }
+      // 上传成功，发送图片消息
+      sendImageMessage(data.url);
+    } catch (err) {
+      console.error('上传图片失败:', err);
+      showToast('上传图片失败', 'error');
+    }
+  }
+
+  // V0.7 新增：发送动图消息
+  function sendSticker(sticker) {
+    if (!state.currentConvId || !sticker) return;
+    var stickerContent = JSON.stringify({
+      cssClass: sticker.cssClass,
+      icon: sticker.icon,
+      name: sticker.name,
+    });
+    state.socket.emit(
+      'send_message',
+      { conversationId: state.currentConvId, content: stickerContent, type: 'sticker' },
+      function(response) {
+        if (response && response.error) {
+          showToast(response.error, 'error');
+        } else if (response && response.ok) {
+          if (response.message) {
+            var exists = document.querySelector('[data-msg-id="' + response.message.id + '"]');
+            if (!exists) {
+              handleNewMessage(response.message);
+            }
+          }
+        }
+      }
+    );
+  }
+
+  // V0.7 新增：打开图片预览
+  function openImagePreview(url) {
+    if (!url) return;
+    el.imagePreviewImg.src = url;
+    el.imagePreviewModal.style.display = 'flex';
+  }
+
+  // V0.7 新增：关闭图片预览
+  function closeImagePreview() {
+    el.imagePreviewModal.style.display = 'none';
+    el.imagePreviewImg.src = '';
+  }
+
   // ============================================================
   // 正在输入
   // ============================================================
@@ -1159,6 +1677,48 @@
         insertEmoji(emoji);
       });
       el.emojiGrid.appendChild(item);
+    });
+
+    // V0.7 新增：初始化动图面板
+    if (el.stickerGrid) {
+      el.stickerGrid.innerHTML = '';
+      STICKERS.forEach(function(sticker) {
+        var item = document.createElement('div');
+        item.className = 'sticker-item ' + sticker.cssClass;
+        item.title = sticker.name;
+        var icon = document.createElement('span');
+        icon.className = 'sticker-icon';
+        icon.textContent = sticker.icon;
+        item.appendChild(icon);
+        var label = document.createElement('span');
+        label.className = 'sticker-label';
+        label.textContent = sticker.name;
+        item.appendChild(label);
+        item.addEventListener('click', function() {
+          sendSticker(sticker);
+          closeEmojiPanel();
+        });
+        el.stickerGrid.appendChild(item);
+      });
+    }
+
+    // V0.7 新增：表情/动图 Tab 切换
+    document.querySelectorAll('.emoji-panel-tab').forEach(function(tab) {
+      tab.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var target = tab.getAttribute('data-emoji-tab');
+        document.querySelectorAll('.emoji-panel-tab').forEach(function(t) {
+          t.classList.remove('active');
+        });
+        tab.classList.add('active');
+        if (target === 'emoji') {
+          el.emojiTabContent.style.display = 'block';
+          el.stickerTabContent.style.display = 'none';
+        } else {
+          el.emojiTabContent.style.display = 'none';
+          el.stickerTabContent.style.display = 'block';
+        }
+      });
     });
   }
 
@@ -1517,6 +2077,11 @@
         el.avatarUploadPreview.textContent = getInitial(currentUser.nickname || currentUser.username);
       }
     }
+    // V0.7 新增：应用会员颜色到自己的昵称
+    var membership = currentUser.membership || 'free';
+    applyMembershipStyle(el.myNickname, membership, currentUser.membershipColor);
+    // V0.7 新增：更新会员信息显示
+    updateMembershipDisplay();
   }
 
   // ============================================================
@@ -1567,6 +2132,8 @@
       const name = document.createElement('div');
       name.className = 'friend-item-name';
       name.textContent = friend.nickname;
+      // V0.7 新增：应用会员颜色
+      applyMembershipStyle(name, friend.membership, friend.membershipColor);
       info.appendChild(name);
 
       const status = document.createElement('div');
@@ -2020,6 +2587,21 @@
       var nameRow = document.createElement('div');
       nameRow.className = 'admin-user-name';
       nameRow.textContent = user.nickname || '(未设置昵称)';
+      // V0.7 新增：应用会员颜色
+      applyMembershipStyle(nameRow, user.membership, user.membershipColor);
+
+      // V0.7 新增：角色标记
+      if (user.role === 'superadmin') {
+        var roleBadge = document.createElement('span');
+        roleBadge.className = 'role-badge superadmin';
+        roleBadge.textContent = '超管';
+        nameRow.appendChild(roleBadge);
+      } else if (user.membership === 'crown') {
+        var adminBadge = document.createElement('span');
+        adminBadge.className = 'role-badge admin';
+        adminBadge.textContent = '管理员';
+        nameRow.appendChild(adminBadge);
+      }
 
       // 在线状态点
       var statusDot = document.createElement('span');
@@ -2079,6 +2661,29 @@
             if (reason) banUser(user.id, reason);
           });
           actions.appendChild(banBtn);
+        }
+
+        // V0.7 新增：提升/撤销超管按钮
+        if (user.role === 'superadmin') {
+          var demoteBtn = document.createElement('button');
+          demoteBtn.className = 'admin-action-btn demote';
+          demoteBtn.textContent = '撤销超管';
+          demoteBtn.addEventListener('click', function() {
+            if (confirm('确定撤销 ' + user.nickname + ' 的超管身份吗？')) {
+              demoteUser(user.id);
+            }
+          });
+          actions.appendChild(demoteBtn);
+        } else {
+          var promoteBtn = document.createElement('button');
+          promoteBtn.className = 'admin-action-btn promote';
+          promoteBtn.textContent = '提升超管';
+          promoteBtn.addEventListener('click', function() {
+            if (confirm('确定将 ' + user.nickname + ' 提升为超管吗？')) {
+              promoteUser(user.id);
+            }
+          });
+          actions.appendChild(promoteBtn);
         }
 
         item.appendChild(actions);
@@ -2147,6 +2752,62 @@
       loadAdminUsers();
     } catch (err) {
       showToast('警告失败', 'error');
+    }
+  }
+
+  // V0.7 新增：提升用户为超管
+  async function promoteUser(userId) {
+    try {
+      var res = await apiFetch('/api/users/' + userId + '/promote', {
+        method: 'POST',
+      });
+      var data = await res.json();
+      if (!res.ok) { showToast(data.error || '提升失败', 'error'); return; }
+      showToast('用户已提升为超管', 'success');
+      loadAdminUsers();
+    } catch (err) {
+      showToast('提升失败', 'error');
+    }
+  }
+
+  // V0.7 新增：撤销超管身份
+  async function demoteUser(userId) {
+    try {
+      var res = await apiFetch('/api/users/' + userId + '/demote', {
+        method: 'POST',
+      });
+      var data = await res.json();
+      if (!res.ok) { showToast(data.error || '撤销失败', 'error'); return; }
+      showToast('超管身份已撤销', 'success');
+      loadAdminUsers();
+    } catch (err) {
+      showToast('撤销失败', 'error');
+    }
+  }
+
+  // V0.7 新增：保存会员颜色
+  async function saveMembershipColor() {
+    var color = el.membershipColorInput.value.trim();
+    if (!color) {
+      showToast('请输入颜色值', 'error');
+      return;
+    }
+    try {
+      var res = await apiFetch('/api/users/membership-color', {
+        method: 'POST',
+        body: JSON.stringify({ color: color }),
+      });
+      var data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || '保存失败', 'error');
+        return;
+      }
+      showToast('颜色已保存', 'success');
+      currentUser = data.user;
+      localStorage.setItem('fc_user', JSON.stringify(currentUser));
+      updateMyInfo();
+    } catch (err) {
+      showToast('保存失败', 'error');
     }
   }
 
@@ -2517,6 +3178,8 @@
       var nameRow = document.createElement('div');
       nameRow.className = 'group-member-name';
       nameRow.textContent = m.nickname || m.username || '未知用户';
+      // V0.7 新增：应用会员颜色
+      applyMembershipStyle(nameRow, m.membership, m.membershipColor);
 
       // 群主标记
       if (conv && conv.createdBy === m.id) {
@@ -2774,11 +3437,9 @@
       }
     });
 
-    // 返回按钮（移动端）
+    // 返回按钮（移动端）— V0.7 增强：调用 goBackToList
     el.backBtn.addEventListener('click', () => {
-      el.chatContent.classList.remove('mobile-show');
-      state.socket.emit('leave_conversation');
-      state.currentConvId = null;
+      goBackToList();
     });
 
     // 新建聊天
@@ -2867,10 +3528,89 @@
       }
     });
 
-    // V0.2 新增：附件按钮（占位，仅提示）
-    el.attachBtn.addEventListener('click', () => {
-      showToast('附件功能将在后续版本推出', 'info');
+    // V0.7 新增：附件按钮 — 展开菜单
+    el.attachBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (el.attachMenu.style.display === 'none' || !el.attachMenu.style.display) {
+        el.attachMenu.style.display = 'flex';
+      } else {
+        el.attachMenu.style.display = 'none';
+      }
     });
+
+    // 点击其他区域关闭附件菜单
+    document.addEventListener('click', (e) => {
+      if (el.attachMenu.style.display !== 'none') {
+        if (!el.attachMenu.contains(e.target) && e.target !== el.attachBtn && !el.attachBtn.contains(e.target)) {
+          el.attachMenu.style.display = 'none';
+        }
+      }
+    });
+
+    // V0.7 新增：附件菜单 — 照片
+    el.attachPhotoBtn.addEventListener('click', function() {
+      el.attachMenu.style.display = 'none';
+      el.imageFileInput.click();
+    });
+
+    // V0.7 新增：附件菜单 — 表情
+    el.attachEmojiBtn.addEventListener('click', function() {
+      el.attachMenu.style.display = 'none';
+      // 切换到表情 Tab
+      var emojiTab = document.querySelector('.emoji-panel-tab[data-emoji-tab="emoji"]');
+      if (emojiTab) emojiTab.click();
+      toggleEmojiPanel();
+    });
+
+    // V0.7 新增：附件菜单 — 动图
+    el.attachStickerBtn.addEventListener('click', function() {
+      el.attachMenu.style.display = 'none';
+      // 打开表情面板并切换到动图 Tab
+      el.emojiPanel.style.display = 'block';
+      el.emojiBtn.classList.add('active');
+      var stickerTab = document.querySelector('.emoji-panel-tab[data-emoji-tab="sticker"]');
+      if (stickerTab) stickerTab.click();
+    });
+
+    // V0.7 新增：图片文件选择
+    el.imageFileInput.addEventListener('change', function() {
+      var file = el.imageFileInput.files[0];
+      if (file) {
+        uploadAndSendImage(file);
+        el.imageFileInput.value = '';
+      }
+    });
+
+    // V0.7 新增：主题切换按钮
+    el.themeToggleBtn.addEventListener('click', function() {
+      toggleTheme();
+    });
+
+    // V0.7 新增：关于按钮
+    el.aboutBtn.addEventListener('click', function() {
+      el.aboutModal.style.display = 'flex';
+    });
+    el.closeAboutBtn.addEventListener('click', function() {
+      el.aboutModal.style.display = 'none';
+    });
+    el.aboutModal.addEventListener('click', function(e) {
+      if (e.target === el.aboutModal) {
+        el.aboutModal.style.display = 'none';
+      }
+    });
+
+    // V0.7 新增：图片预览关闭
+    el.closeImagePreviewBtn.addEventListener('click', closeImagePreview);
+    el.imagePreviewModal.addEventListener('click', function(e) {
+      if (e.target === el.imagePreviewModal) {
+        closeImagePreview();
+      }
+    });
+
+    // V0.7 新增：保存会员颜色
+    if (el.saveMembershipColorBtn) {
+      el.saveMembershipColorBtn.addEventListener('click', saveMembershipColor);
+    }
 
     // V0.2 新增：滚动到底部按钮点击
     el.scrollBottomBtn.addEventListener('click', scrollToBottom);
@@ -3098,6 +3838,7 @@
   // 初始化
   // ============================================================
   function init() {
+    initTheme(); // V0.7: 初始化主题
     updateMyInfo();
     initEmojiPanel();
     bindEvents();
@@ -3109,6 +3850,7 @@
     updateClock(); // V0.6: 启动时钟
     setInterval(updateClock, 1000); // V0.6: 每秒更新时钟
     loadUnreadMailCount(); // V0.6: 启动时加载未读邮件数
+    refreshCurrentUser(); // V0.7: 刷新当前用户信息（获取会员等级）
   }
 
   // DOM 就绪后初始化
