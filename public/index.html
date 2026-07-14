@@ -94,6 +94,20 @@
     </div>
   </div>
 
+  <!-- V0.65 新增：封禁提示覆盖层 -->
+  <div class="banned-overlay" id="banned-overlay" style="display:none;">
+    <div class="banned-card">
+      <div class="banned-icon">
+        <svg viewBox="0 0 24 24" width="64" height="64"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8 0-1.85.63-3.55 1.69-4.9L16.9 18.31C15.55 19.37 13.85 20 12 20zm6.31-3.1L7.1 5.69C8.45 4.63 10.15 4 12 4c4.41 0 8 3.59 8 8 0 1.85-.63 3.55-1.69 4.9z"/></svg>
+      </div>
+      <h2 class="banned-title">账号已被封禁</h2>
+      <p class="banned-reason-label">封禁原因：</p>
+      <p class="banned-reason-text" id="banned-reason-text"></p>
+      <p class="banned-hint">如有疑问请联系管理员解封</p>
+      <p class="banned-countdown" id="banned-countdown">5秒后返回登录界面...</p>
+    </div>
+  </div>
+
   <!-- V0.6 新增：注册后软件公告弹窗 -->
   <div class="modal-overlay" id="announcement-modal" style="display:none;">
     <div class="modal announcement-modal">
