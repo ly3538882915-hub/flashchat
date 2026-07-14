@@ -23,7 +23,7 @@ const multer = require('multer');
 // ============================================================
 // 配置常量
 // ============================================================
-const APP_VERSION = 'v0.6';
+const APP_VERSION = 'v0.65';
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0'; // 监听所有网络接口，允许局域网访问
 const JWT_SECRET = process.env.JWT_SECRET || 'flashchat-secret-key-v0.2-please-change-in-production';
@@ -49,27 +49,16 @@ const BANNED_WORDS = [
   'dick', 'pussy', 'asshole', 'nigger', ' Nazi', '纳粹'
 ];
 
-// V0.6 新增：软件公告内容（管理员可后续修改）
+// V0.65 新增：软件公告内容
 const ANNOUNCEMENT = {
-  version: 'v0.6',
-  title: 'FlashChat V0.6 更新公告',
+  version: 'v0.65',
+  title: 'FlashChat 公告',
   content: [
-    '欢迎使用 FlashChat V0.6！本次更新带来以下新功能：',
+    '软件开发运营商 - FlashChat工作室',
     '',
-    '1. 好友系统完善 - 支持删除好友功能',
-    '2. 管理员系统 - 封禁违规账号、发送警告通知',
-    '3. 音乐建议 - 普通用户可提交想听的歌曲建议',
-    '4. 邮件系统 - 用户间可发送邮件消息',
-    '5. 头像上传 - 支持自定义头像上传',
-    '6. 实时时钟 - 右上角显示当前精确时间',
-    '7. 违禁词过滤 - 注册时过滤不当用词',
-    '8. 上传限制提升 - 音乐文件最大支持 300MB',
+    '如有问题可以通过邮箱反映给管理员。',
     '',
-    '请遵守社区规范，文明交流。违规行为将被管理员处理。',
-    '',
-    '如有问题或建议，请联系管理员。',
-    '',
-    '— FlashChat 团队'
+    '— FlashChat工作室'
   ].join('\n'),
   updatedAt: new Date().toISOString(),
 };
@@ -207,12 +196,13 @@ const stmts = {
     'INSERT INTO users (id, username, password_hash, nickname, avatar_color, created_at) VALUES (?, ?, ?, ?, ?, ?)'
   ),
   getUserByUsername: db.prepare('SELECT * FROM users WHERE username = ?'),
+  getUserByNickname: db.prepare('SELECT * FROM users WHERE nickname = ?'),
   getUserById: db.prepare('SELECT * FROM users WHERE id = ?'),
   searchUsers: db.prepare(
     'SELECT id, username, nickname, avatar_color, created_at FROM users WHERE username LIKE ? OR nickname LIKE ? LIMIT 20'
   ),
   getAllUsers: db.prepare(
-    'SELECT id, username, nickname, avatar_color, created_at FROM users ORDER BY created_at DESC'
+    'SELECT id, username, nickname, avatar_color, avatar_url, banned, banned_reason, created_at FROM users ORDER BY created_at DESC'
   ),
   getUserCount: db.prepare('SELECT COUNT(*) as count FROM users'),
   updateUserProfile: db.prepare('UPDATE users SET nickname = ? WHERE id = ?'),
@@ -645,6 +635,15 @@ app.post('/api/login', (req, res) => {
   const ok = bcrypt.compareSync(password, user.password_hash);
   if (!ok) {
     return res.status(401).json({ error: '用户名或密码错误' });
+  }
+
+  // V0.65 新增：检查封禁状态 - 返回封禁信息让前端显示
+  if (user.banned) {
+    return res.status(403).json({
+      error: '您的账号已被封禁',
+      banned: true,
+      bannedReason: user.banned_reason || '违反社区规范'
+    });
   }
 
   const token = signToken(user.id);
@@ -1243,15 +1242,18 @@ app.delete('/api/music/suggestions/:id', authMiddleware, (req, res) => {
   res.json({ ok: true });
 });
 
-// 邮件 - 发送
+// 邮件 - 发送（V0.65改为按昵称查找）
 app.post('/api/mails/send', authMiddleware, (req, res) => {
-  const { recipientUsername, subject, content } = req.body || {};
-  if (!recipientUsername || !subject || !content) {
+  const { recipientNickname, subject, content } = req.body || {};
+  if (!recipientNickname || !subject || !content) {
     return res.status(400).json({ error: '收件人、主题和内容不能为空' });
   }
-  const recipient = stmts.getUserByUsername.get(recipientUsername);
+  const recipient = stmts.getUserByNickname.get(recipientNickname.trim());
   if (!recipient) {
     return res.status(404).json({ error: '收件人不存在' });
+  }
+  if (recipient.id === req.user.id) {
+    return res.status(400).json({ error: '不能给自己发邮件' });
   }
   if (recipient.banned) {
     return res.status(400).json({ error: '收件人账号已被封禁' });
@@ -1296,6 +1298,42 @@ app.post('/api/mails/:id/read', authMiddleware, (req, res) => {
   }
   stmts.markMailRead.run(mail.id);
   res.json({ ok: true });
+});
+
+// V0.65 新增：邮件 - 删除（发件人或收件人可删）
+app.delete('/api/mails/:id', authMiddleware, (req, res) => {
+  const mail = stmts.getMailById.get(req.params.id);
+  if (!mail) {
+    return res.status(404).json({ error: '邮件不存在' });
+  }
+  if (mail.recipient_id !== req.user.id && mail.sender_id !== req.user.id) {
+    return res.status(403).json({ error: '无权操作' });
+  }
+  try { db.prepare('DELETE FROM mails WHERE id = ?').run(mail.id); } catch(e) {}
+  res.json({ ok: true });
+});
+
+// V0.65 新增：获取在线用户列表（供邮件@选择）
+app.get('/api/users/online', authMiddleware, (req, res) => {
+  const onlineUserIds = new Set();
+  for (const [sid, socket] of io.sockets.sockets) {
+    if (socket.handshake && socket.handshake.userId) {
+      onlineUserIds.add(socket.handshake.userId);
+    }
+  }
+  const users = [];
+  for (const userId of onlineUserIds) {
+    const u = stmts.getUserById.get(userId);
+    if (u && u.id !== req.user.id) {
+      users.push({
+        id: u.id,
+        nickname: u.nickname,
+        username: u.username,
+        avatarColor: u.avatar_color,
+      });
+    }
+  }
+  res.json({ users });
 });
 
 // 头像上传
