@@ -75,6 +75,8 @@
     currentMusic: null,        // 当前播放的音乐
     isPlaying: false,          // 是否正在播放
     isAdmin: false,            // 是否是管理员
+    // V0.5 新增：管理员用户管理
+    adminUsers: [],            // 管理员视角的用户列表
   };
 
   // ============================================================
@@ -156,6 +158,13 @@
     playerProgress: document.getElementById('player-progress'),
     playerProgressBar: document.getElementById('player-progress-bar'),
     audioPlayer: document.getElementById('audio-player'),
+    // V0.5 新增：管理员用户管理
+    adminPanel: document.getElementById('admin-panel'),
+    adminUserList: document.getElementById('admin-user-list'),
+    adminTotalCount: document.getElementById('admin-total-count'),
+    adminOnlineCount: document.getElementById('admin-online-count'),
+    adminRefreshBtn: document.getElementById('admin-refresh-btn'),
+    adminTabs: document.querySelectorAll('.admin-only-tab'),
   };
 
   // ============================================================
@@ -1533,12 +1542,16 @@
     el.convList.style.display = tabName === 'chats' ? 'block' : 'none';
     el.friendsPanel.style.display = tabName === 'friends' ? 'block' : 'none';
     el.musicPanel.style.display = tabName === 'music' ? 'block' : 'none';
+    el.adminPanel.style.display = tabName === 'admin' ? 'block' : 'none';
     if (tabName === 'friends') {
       loadFriends();
       loadFriendRequests();
     }
     if (tabName === 'music') {
       loadMusicList();
+    }
+    if (tabName === 'admin') {
+      loadAdminUsers();
     }
   }
 
@@ -1562,6 +1575,8 @@
       state.isAdmin = !!(data.user && data.user.isAdmin);
       if (state.isAdmin) {
         el.musicUploadBtn.style.display = 'flex';
+        // 显示"用户管理"标签
+        el.adminTabs.forEach(function(tab) { tab.style.display = 'block'; });
       }
     } catch (err) {
       console.error('检查管理员状态失败:', err);
@@ -1746,6 +1761,76 @@
   }
 
   // ============================================================
+  // V0.5 新增：管理员用户管理
+  // ============================================================
+
+  /** 加载所有注册用户列表 */
+  async function loadAdminUsers() {
+    try {
+      const res = await apiFetch('/api/admin/users');
+      if (!res.ok) {
+        const err = await res.json();
+        showToast(err.error || '获取用户列表失败', 'error');
+        return;
+      }
+      const data = await res.json();
+      state.adminUsers = data.users || [];
+      el.adminTotalCount.textContent = data.total || 0;
+      el.adminOnlineCount.textContent = data.online || 0;
+      renderAdminUsers();
+    } catch (err) {
+      console.error('加载用户列表失败:', err);
+      showToast('加载用户列表失败', 'error');
+    }
+  }
+
+  /** 渲染用户列表 */
+  function renderAdminUsers() {
+    el.adminUserList.innerHTML = '';
+    if (!state.adminUsers.length) {
+      el.adminUserList.innerHTML = '<p class="empty-hint">暂无注册用户</p>';
+      return;
+    }
+    state.adminUsers.forEach(function(user) {
+      var item = document.createElement('div');
+      item.className = 'admin-user-item';
+
+      // 头像
+      var avatar = document.createElement('div');
+      avatar.className = 'avatar admin-user-avatar';
+      avatar.style.background = user.avatarColor || '#2AABEE';
+      var initial = (user.nickname || user.username || '?').charAt(0).toUpperCase();
+      avatar.textContent = initial;
+      item.appendChild(avatar);
+
+      // 信息
+      var info = document.createElement('div');
+      info.className = 'admin-user-info';
+      var nameRow = document.createElement('div');
+      nameRow.className = 'admin-user-name';
+      nameRow.textContent = user.nickname || '(未设置昵称)';
+
+      // 在线状态点
+      var statusDot = document.createElement('span');
+      statusDot.className = 'admin-status-dot ' + (user.isOnline ? 'online' : 'offline');
+      nameRow.appendChild(statusDot);
+      info.appendChild(nameRow);
+
+      var metaRow = document.createElement('div');
+      metaRow.className = 'admin-user-meta';
+      var dateStr = user.createdAt ? new Date(user.createdAt).toLocaleString('zh-CN', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit'
+      }) : '未知';
+      metaRow.textContent = '用户名: ' + user.username + '  ·  注册时间: ' + dateStr;
+      info.appendChild(metaRow);
+
+      item.appendChild(info);
+      el.adminUserList.appendChild(item);
+    });
+  }
+
+  // ============================================================
   // 事件绑定
   // ============================================================
   function bindEvents() {
@@ -1918,6 +2003,9 @@
       el.playerPauseBtn.style.display = 'none';
       el.playerProgressBar.style.width = '0%';
     });
+
+    // V0.5 新增：管理员用户管理事件绑定
+    el.adminRefreshBtn.addEventListener('click', loadAdminUsers);
 
     // 涟漪效果绑定到按钮
     document.querySelectorAll('.btn-primary, .send-btn, .icon-btn').forEach((btn) => {
