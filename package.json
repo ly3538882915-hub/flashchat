@@ -1,7 +1,7 @@
 {
   "name": "flash-chat-web",
-  "version": "0.6.5",
-  "description": "FlashChat - Telegram风格网页版聊天软件 V0.65（封禁显示+字体切换+邮件删除+手机适配）",
+  "version": "0.65.2",
+  "description": "FlashChat - Telegram风格网页版聊天软件 V0.65.2（字体切换移到空状态页面）",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
