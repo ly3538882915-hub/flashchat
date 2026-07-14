@@ -77,6 +77,10 @@
     isAdmin: false,            // 是否是管理员
     // V0.5 新增：管理员用户管理
     adminUsers: [],            // 管理员视角的用户列表
+    // V0.6 新增：邮件和音乐建议
+    mails: [],                 // 邮件列表
+    unreadMails: 0,            // 未读邮件数
+    musicSuggestions: [],      // 音乐建议列表
   };
 
   // ============================================================
@@ -165,6 +169,33 @@
     adminOnlineCount: document.getElementById('admin-online-count'),
     adminRefreshBtn: document.getElementById('admin-refresh-btn'),
     adminTabs: document.querySelectorAll('.admin-only-tab'),
+    // V0.6 新增：实时时钟
+    clockDisplay: document.getElementById('clock-display'),
+    // V0.6 新增：邮件系统
+    mailPanel: document.getElementById('mail-panel'),
+    mailRecipient: document.getElementById('mail-recipient'),
+    mailSubject: document.getElementById('mail-subject'),
+    mailContent: document.getElementById('mail-content'),
+    sendMailBtn: document.getElementById('send-mail-btn'),
+    mailList: document.getElementById('mail-list'),
+    mailRefreshBtn: document.getElementById('mail-refresh-btn'),
+    mailBadge: document.getElementById('mail-badge'),
+    mailViewModal: document.getElementById('mail-view-modal'),
+    mailViewSubject: document.getElementById('mail-view-subject'),
+    mailViewSender: document.getElementById('mail-view-sender'),
+    mailViewTime: document.getElementById('mail-view-time'),
+    mailViewContent: document.getElementById('mail-view-content'),
+    closeMailViewBtn: document.getElementById('close-mail-view-btn'),
+    // V0.6 新增：音乐建议
+    suggestionSongName: document.getElementById('suggestion-song-name'),
+    suggestionArtist: document.getElementById('suggestion-artist'),
+    suggestionNote: document.getElementById('suggestion-note'),
+    submitSuggestionBtn: document.getElementById('submit-suggestion-btn'),
+    musicSuggestionList: document.getElementById('music-suggestion-list'),
+    // V0.6 新增：头像上传
+    avatarUploadArea: document.getElementById('avatar-upload-area'),
+    avatarUploadPreview: document.getElementById('avatar-upload-preview'),
+    avatarFileInput: document.getElementById('avatar-file-input'),
   };
 
   // ============================================================
@@ -400,6 +431,30 @@
     state.socket.on('friend_removed', (data) => {
       loadFriends();
       showToast('一段好友关系已结束', 'info');
+    });
+
+    // V0.6 新增：被封禁通知
+    state.socket.on('banned', (data) => {
+      showToast('您已被封禁' + (data.reason ? '，原因：' + data.reason : ''), 'error');
+      setTimeout(function() {
+        localStorage.removeItem('fc_token');
+        localStorage.removeItem('fc_user');
+        window.location.href = '/index.html';
+      }, 3000);
+    });
+
+    // V0.6 新增：被警告通知
+    state.socket.on('warned', (data) => {
+      showToast('管理员警告：' + data.reason, 'warning');
+    });
+
+    // V0.6 新增：新邮件通知
+    state.socket.on('new_mail', (data) => {
+      showToast('收到新邮件：' + data.subject + '（来自 ' + (data.from ? data.from.nickname : '未知') + '）', 'info');
+      loadUnreadMailCount();
+      if (state.activeTab === 'mail') {
+        loadMails();
+      }
     });
   }
 
@@ -1349,6 +1404,25 @@
     el.myNickname.textContent = currentUser.nickname || currentUser.username;
     el.myAvatar.style.background = currentUser.avatarColor || '#2AABEE';
     el.myAvatar.textContent = getInitial(currentUser.nickname || currentUser.username);
+    // V0.6 新增：如果有自定义头像，使用图片
+    if (currentUser.avatarUrl) {
+      el.myAvatar.style.backgroundImage = `url(${currentUser.avatarUrl})`;
+      el.myAvatar.style.backgroundSize = 'cover';
+      el.myAvatar.style.backgroundPosition = 'center';
+      el.myAvatar.textContent = '';
+    }
+    // V0.6 新增：更新设置弹窗中的头像预览
+    if (el.avatarUploadPreview) {
+      if (currentUser.avatarUrl) {
+        el.avatarUploadPreview.style.backgroundImage = `url(${currentUser.avatarUrl})`;
+        el.avatarUploadPreview.style.backgroundSize = 'cover';
+        el.avatarUploadPreview.style.backgroundPosition = 'center';
+        el.avatarUploadPreview.textContent = '';
+      } else {
+        el.avatarUploadPreview.style.background = currentUser.avatarColor || '#2AABEE';
+        el.avatarUploadPreview.textContent = getInitial(currentUser.nickname || currentUser.username);
+      }
+    }
   }
 
   // ============================================================
@@ -1408,6 +1482,19 @@
       info.appendChild(status);
 
       item.appendChild(info);
+
+      // V0.6 新增：删除好友按钮
+      var removeBtn = document.createElement('button');
+      removeBtn.className = 'friend-action-btn remove';
+      removeBtn.title = '删除好友';
+      removeBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>';
+      removeBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (confirm('确定删除好友 ' + friend.nickname + ' 吗？')) {
+          removeFriend(friend.friendshipId);
+        }
+      });
+      item.appendChild(removeBtn);
 
       // 点击好友发起私聊
       item.addEventListener('click', () => {
@@ -1533,6 +1620,23 @@
     }
   }
 
+  /** V0.6 新增：删除好友 */
+  async function removeFriend(friendshipId) {
+    try {
+      const res = await apiFetch(`/api/friends/${friendshipId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || '删除好友失败', 'error');
+        return;
+      }
+      showToast('好友已删除', 'info');
+      loadFriends();
+    } catch (err) {
+      console.error('删除好友失败:', err);
+      showToast('删除好友失败', 'error');
+    }
+  }
+
   /** 切换侧边栏标签 */
   function switchSidebarTab(tabName) {
     state.activeTab = tabName;
@@ -1542,6 +1646,7 @@
     el.convList.style.display = tabName === 'chats' ? 'block' : 'none';
     el.friendsPanel.style.display = tabName === 'friends' ? 'block' : 'none';
     el.musicPanel.style.display = tabName === 'music' ? 'block' : 'none';
+    el.mailPanel.style.display = tabName === 'mail' ? 'block' : 'none';
     el.adminPanel.style.display = tabName === 'admin' ? 'block' : 'none';
     if (tabName === 'friends') {
       loadFriends();
@@ -1549,6 +1654,10 @@
     }
     if (tabName === 'music') {
       loadMusicList();
+      loadMusicSuggestions();
+    }
+    if (tabName === 'mail') {
+      loadMails();
     }
     if (tabName === 'admin') {
       loadAdminUsers();
@@ -1714,7 +1823,7 @@
     var mainP = el.fileUploadHint.querySelector('.file-upload-main');
     var subP = el.fileUploadHint.querySelector('.file-upload-sub');
     if (mainP) mainP.textContent = '点击选择音频文件';
-    if (subP) subP.textContent = '支持 MP3, WAV, OGG, M4A, FLAC（最大 30MB）';
+    if (subP) subP.textContent = '支持 MP3, WAV, OGG, M4A, FLAC（最大 300MB）';
   }
 
   /** 关闭上传弹窗 */
@@ -1820,14 +1929,327 @@
       metaRow.className = 'admin-user-meta';
       var dateStr = user.createdAt ? new Date(user.createdAt).toLocaleString('zh-CN', {
         year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit'
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
       }) : '未知';
-      metaRow.textContent = '用户名: ' + user.username + '  ·  注册时间: ' + dateStr;
+      metaRow.textContent = '用户名: ' + user.username + '  ·  注册: ' + dateStr;
+      if (user.warningCount > 0) {
+        metaRow.textContent += '  ·  警告: ' + user.warningCount + '次';
+      }
+      if (user.banned) {
+        metaRow.textContent += '  ·  已封禁';
+      }
       info.appendChild(metaRow);
 
       item.appendChild(info);
+
+      // V0.6 新增：管理员操作按钮
+      if (!isAdmin(user)) {
+        var actions = document.createElement('div');
+        actions.className = 'admin-user-actions';
+
+        // 警告按钮
+        var warnBtn = document.createElement('button');
+        warnBtn.className = 'admin-action-btn warn';
+        warnBtn.textContent = '警告';
+        warnBtn.addEventListener('click', function() {
+          var reason = prompt('请输入警告原因：');
+          if (reason) warnUser(user.id, reason);
+        });
+        actions.appendChild(warnBtn);
+
+        // 封禁/解封按钮
+        if (user.banned) {
+          var unbanBtn = document.createElement('button');
+          unbanBtn.className = 'admin-action-btn unban';
+          unbanBtn.textContent = '解封';
+          unbanBtn.addEventListener('click', function() {
+            if (confirm('确定解封 ' + user.nickname + ' 吗？')) {
+              unbanUser(user.id);
+            }
+          });
+          actions.appendChild(unbanBtn);
+        } else {
+          var banBtn = document.createElement('button');
+          banBtn.className = 'admin-action-btn ban';
+          banBtn.textContent = '封禁';
+          banBtn.addEventListener('click', function() {
+            var reason = prompt('请输入封禁原因：');
+            if (reason) banUser(user.id, reason);
+          });
+          actions.appendChild(banBtn);
+        }
+
+        item.appendChild(actions);
+      }
       el.adminUserList.appendChild(item);
     });
+  }
+
+  // ============================================================
+  // V0.6 新增：实时时钟
+  // ============================================================
+  function updateClock() {
+    var now = new Date();
+    var y = now.getFullYear();
+    var mo = String(now.getMonth() + 1).padStart(2, '0');
+    var d = String(now.getDate()).padStart(2, '0');
+    var h = String(now.getHours()).padStart(2, '0');
+    var mi = String(now.getMinutes()).padStart(2, '0');
+    var s = String(now.getSeconds()).padStart(2, '0');
+    if (el.clockDisplay) {
+      el.clockDisplay.textContent = y + '-' + mo + '-' + d + ' ' + h + ':' + mi + ':' + s;
+    }
+  }
+
+  // ============================================================
+  // V0.6 新增：管理员封禁/警告/解封
+  // ============================================================
+  async function banUser(userId, reason) {
+    try {
+      var res = await apiFetch('/api/admin/users/' + userId + '/ban', {
+        method: 'POST',
+        body: JSON.stringify({ reason: reason }),
+      });
+      var data = await res.json();
+      if (!res.ok) { showToast(data.error || '封禁失败', 'error'); return; }
+      showToast('用户已封禁', 'success');
+      loadAdminUsers();
+    } catch (err) {
+      showToast('封禁失败', 'error');
+    }
+  }
+
+  async function unbanUser(userId) {
+    try {
+      var res = await apiFetch('/api/admin/users/' + userId + '/unban', {
+        method: 'POST',
+      });
+      var data = await res.json();
+      if (!res.ok) { showToast(data.error || '解封失败', 'error'); return; }
+      showToast('用户已解封', 'success');
+      loadAdminUsers();
+    } catch (err) {
+      showToast('解封失败', 'error');
+    }
+  }
+
+  async function warnUser(userId, reason) {
+    try {
+      var res = await apiFetch('/api/admin/users/' + userId + '/warn', {
+        method: 'POST',
+        body: JSON.stringify({ reason: reason }),
+      });
+      var data = await res.json();
+      if (!res.ok) { showToast(data.error || '警告失败', 'error'); return; }
+      showToast('警告已发送', 'success');
+      loadAdminUsers();
+    } catch (err) {
+      showToast('警告失败', 'error');
+    }
+  }
+
+  // ============================================================
+  // V0.6 新增：音乐建议
+  // ============================================================
+  async function loadMusicSuggestions() {
+    try {
+      var res = await apiFetch('/api/music/suggestions');
+      var data = await res.json();
+      state.musicSuggestions = data.suggestions || [];
+      renderMusicSuggestions();
+    } catch (err) {
+      console.error('加载音乐建议失败:', err);
+    }
+  }
+
+  function renderMusicSuggestions() {
+    if (!el.musicSuggestionList) return;
+    el.musicSuggestionList.innerHTML = '';
+    if (state.musicSuggestions.length === 0) {
+      el.musicSuggestionList.innerHTML = '<p class="empty-hint">暂无建议</p>';
+      return;
+    }
+    state.musicSuggestions.forEach(function(s) {
+      var item = document.createElement('div');
+      item.className = 'suggestion-item';
+      var text = document.createElement('div');
+      text.className = 'suggestion-text';
+      text.innerHTML = '<strong>' + escapeHtml(s.songName) + '</strong>' +
+        (s.artist ? ' - ' + escapeHtml(s.artist) : '') +
+        (s.note ? '<br><span class="suggestion-note">' + escapeHtml(s.note) + '</span>' : '') +
+        '<br><span class="suggestion-meta">@' + escapeHtml(s.suggestedBy ? s.suggestedBy.username : 'unknown') +
+        ' · ' + formatTime(s.createdAt) + '</span>';
+      item.appendChild(text);
+      if (state.isAdmin) {
+        var delBtn = document.createElement('button');
+        delBtn.className = 'music-delete-btn';
+        delBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>';
+        delBtn.addEventListener('click', function() { deleteSuggestion(s.id); });
+        item.appendChild(delBtn);
+      }
+      el.musicSuggestionList.appendChild(item);
+    });
+  }
+
+  async function submitSuggestion() {
+    var songName = el.suggestionSongName.value.trim();
+    var artist = el.suggestionArtist.value.trim();
+    var note = el.suggestionNote.value.trim();
+    if (!songName) { showToast('请输入歌曲名称', 'error'); return; }
+    try {
+      var res = await apiFetch('/api/music/suggestions', {
+        method: 'POST',
+        body: JSON.stringify({ songName: songName, artist: artist, note: note }),
+      });
+      var data = await res.json();
+      if (!res.ok) { showToast(data.error || '提交失败', 'error'); return; }
+      showToast('建议已提交', 'success');
+      el.suggestionSongName.value = '';
+      el.suggestionArtist.value = '';
+      el.suggestionNote.value = '';
+      loadMusicSuggestions();
+    } catch (err) {
+      showToast('提交失败', 'error');
+    }
+  }
+
+  async function deleteSuggestion(id) {
+    try {
+      var res = await apiFetch('/api/music/suggestions/' + id, { method: 'DELETE' });
+      if (!res.ok) { showToast('删除失败', 'error'); return; }
+      showToast('已删除', 'success');
+      loadMusicSuggestions();
+    } catch (err) {
+      showToast('删除失败', 'error');
+    }
+  }
+
+  // ============================================================
+  // V0.6 新增：邮件系统
+  // ============================================================
+  async function loadMails() {
+    try {
+      var res = await apiFetch('/api/mails');
+      var data = await res.json();
+      state.mails = data.mails || [];
+      state.unreadMails = data.unreadCount || 0;
+      renderMailList();
+      updateMailBadge();
+    } catch (err) {
+      console.error('加载邮件失败:', err);
+    }
+  }
+
+  async function loadUnreadMailCount() {
+    try {
+      var res = await apiFetch('/api/mails');
+      var data = await res.json();
+      state.unreadMails = data.unreadCount || 0;
+      updateMailBadge();
+    } catch (err) {
+      console.error('加载未读邮件数失败:', err);
+    }
+  }
+
+  function updateMailBadge() {
+    if (state.unreadMails > 0) {
+      el.mailBadge.style.display = 'flex';
+      el.mailBadge.textContent = state.unreadMails > 99 ? '99+' : state.unreadMails;
+    } else {
+      el.mailBadge.style.display = 'none';
+    }
+  }
+
+  function renderMailList() {
+    el.mailList.innerHTML = '';
+    if (state.mails.length === 0) {
+      el.mailList.innerHTML = '<p class="empty-hint">暂无邮件</p>';
+      return;
+    }
+    state.mails.forEach(function(m) {
+      var item = document.createElement('div');
+      item.className = 'mail-list-item' + (m.isRead ? '' : ' unread');
+      var header = document.createElement('div');
+      header.className = 'mail-item-header';
+      var from = m.sender ? m.sender.nickname : '未知';
+      header.innerHTML = '<span class="mail-from">' + escapeHtml(from) + '</span>' +
+        '<span class="mail-time">' + formatTime(m.createdAt) + '</span>';
+      item.appendChild(header);
+      var subject = document.createElement('div');
+      subject.className = 'mail-subject';
+      if (!m.isRead) subject.innerHTML = '<span class="mail-unread-dot">●</span> ';
+      subject.innerHTML += escapeHtml(m.subject);
+      item.appendChild(subject);
+      var preview = document.createElement('div');
+      preview.className = 'mail-preview';
+      preview.textContent = m.content.substring(0, 50) + (m.content.length > 50 ? '...' : '');
+      item.appendChild(preview);
+      item.addEventListener('click', function() { viewMail(m); });
+      el.mailList.appendChild(item);
+    });
+  }
+
+  async function viewMail(mail) {
+    el.mailViewSubject.textContent = mail.subject;
+    el.mailViewSender.textContent = mail.sender ? mail.sender.nickname + ' (@' + mail.sender.username + ')' : '未知';
+    el.mailViewTime.textContent = new Date(mail.createdAt).toLocaleString('zh-CN');
+    el.mailViewContent.textContent = mail.content;
+    el.mailViewModal.style.display = 'flex';
+    // 标记已读
+    if (!mail.isRead) {
+      try {
+        await apiFetch('/api/mails/' + mail.id + '/read', { method: 'POST' });
+        loadUnreadMailCount();
+      } catch (err) {}
+    }
+  }
+
+  async function sendMail() {
+    var recipient = el.mailRecipient.value.trim();
+    var subject = el.mailSubject.value.trim();
+    var content = el.mailContent.value.trim();
+    if (!recipient || !subject || !content) {
+      showToast('请填写收件人、主题和内容', 'error');
+      return;
+    }
+    try {
+      var res = await apiFetch('/api/mails/send', {
+        method: 'POST',
+        body: JSON.stringify({ recipientUsername: recipient, subject: subject, content: content }),
+      });
+      var data = await res.json();
+      if (!res.ok) { showToast(data.error || '发送失败', 'error'); return; }
+      showToast('邮件已发送', 'success');
+      el.mailRecipient.value = '';
+      el.mailSubject.value = '';
+      el.mailContent.value = '';
+      loadMails();
+    } catch (err) {
+      showToast('发送失败', 'error');
+    }
+  }
+
+  // ============================================================
+  // V0.6 新增：头像上传
+  // ============================================================
+  async function uploadAvatar(file) {
+    var formData = new FormData();
+    formData.append('avatar', file);
+    try {
+      var res = await fetch('/api/users/avatar', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token },
+        body: formData,
+      });
+      var data = await res.json();
+      if (!res.ok) { showToast(data.error || '上传失败', 'error'); return; }
+      showToast('头像已更新', 'success');
+      currentUser = data.user;
+      localStorage.setItem('fc_user', JSON.stringify(currentUser));
+      updateMyInfo();
+    } catch (err) {
+      showToast('上传失败', 'error');
+    }
   }
 
   // ============================================================
@@ -2007,6 +2429,28 @@
     // V0.5 新增：管理员用户管理事件绑定
     el.adminRefreshBtn.addEventListener('click', loadAdminUsers);
 
+    // V0.6 新增：邮件系统事件绑定
+    el.sendMailBtn.addEventListener('click', sendMail);
+    el.mailRefreshBtn.addEventListener('click', loadMails);
+    el.closeMailViewBtn.addEventListener('click', function() {
+      el.mailViewModal.style.display = 'none';
+    });
+    el.mailViewModal.addEventListener('click', function(e) {
+      if (e.target === el.mailViewModal) el.mailViewModal.style.display = 'none';
+    });
+
+    // V0.6 新增：音乐建议事件绑定
+    el.submitSuggestionBtn.addEventListener('click', submitSuggestion);
+
+    // V0.6 新增：头像上传事件绑定
+    el.avatarUploadArea.addEventListener('click', function() {
+      el.avatarFileInput.click();
+    });
+    el.avatarFileInput.addEventListener('change', function() {
+      var file = el.avatarFileInput.files[0];
+      if (file) uploadAvatar(file);
+    });
+
     // 涟漪效果绑定到按钮
     document.querySelectorAll('.btn-primary, .send-btn, .icon-btn').forEach((btn) => {
       btn.addEventListener('click', addRipple);
@@ -2038,6 +2482,9 @@
     loadFriendRequests(); // V0.3: 启动时加载好友请求
     checkAdmin(); // V0.4: 检查管理员状态
     updateSendBtnIcon(); // 初始化发送按钮图标状态
+    updateClock(); // V0.6: 启动时钟
+    setInterval(updateClock, 1000); // V0.6: 每秒更新时钟
+    loadUnreadMailCount(); // V0.6: 启动时加载未读邮件数
   }
 
   // DOM 就绪后初始化
