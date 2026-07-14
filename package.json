@@ -1,7 +1,7 @@
 {
   "name": "flash-chat-web",
-  "version": "0.2.0",
-  "description": "FlashChat - Telegram风格网页版聊天软件 V0.2",
+  "version": "0.3.0",
+  "description": "FlashChat - Telegram风格网页版聊天软件 V0.3（好友系统）",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
