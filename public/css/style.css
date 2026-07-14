@@ -1963,3 +1963,274 @@ input, textarea {
   color: var(--text-tertiary);
   font-size: 14px;
 }
+
+/* ============================================================
+   V0.4 新增：音乐系统样式
+   ============================================================ */
+
+/* 音乐面板 */
+.music-panel {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.music-section {
+  padding: 0;
+}
+
+.music-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.music-upload-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 16px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.music-upload-btn:hover {
+  background: var(--primary-dark);
+}
+
+.music-upload-btn svg {
+  flex-shrink: 0;
+}
+
+/* 音乐列表项 */
+.music-list-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+  gap: 12px;
+}
+
+.music-list-item:hover {
+  background: var(--bg-hover);
+}
+
+.music-list-item.playing {
+  background: rgba(42, 171, 238, 0.08);
+}
+
+.music-list-item.playing .music-item-icon {
+  color: var(--primary);
+}
+
+.music-item-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  transition: color 0.2s;
+}
+
+.music-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.music-item-title {
+  font-size: 15px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+
+.music-item-meta {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.music-delete-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.music-delete-btn:hover {
+  background: rgba(229, 57, 53, 0.1);
+  color: var(--red);
+}
+
+/* 底部音乐播放器 */
+.music-player {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+  z-index: 100;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.06);
+}
+
+.player-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex-shrink: 0;
+  max-width: 200px;
+}
+
+.player-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.player-text {
+  min-width: 0;
+}
+
+.player-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+.player-time {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 1px;
+}
+
+.player-progress {
+  flex: 1;
+  height: 4px;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+  cursor: pointer;
+  position: relative;
+  min-width: 60px;
+}
+
+.player-progress:hover {
+  height: 6px;
+  transition: height 0.15s;
+}
+
+.player-progress-bar {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.1s linear;
+}
+
+.player-controls {
+  flex-shrink: 0;
+}
+
+.player-btn {
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.player-btn:hover {
+  background: var(--primary-dark);
+}
+
+/* 文件上传区域 */
+.file-upload-area {
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 32px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--text-tertiary);
+}
+
+.file-upload-area:hover {
+  border-color: var(--primary);
+  background: rgba(42, 171, 238, 0.04);
+}
+
+.file-upload-area svg {
+  margin: 0 auto 8px;
+  display: block;
+  opacity: 0.5;
+}
+
+.file-upload-area:hover svg {
+  opacity: 1;
+  color: var(--primary);
+}
+
+.file-upload-hint .file-upload-main {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 4px 0 2px;
+}
+
+.file-upload-hint .file-upload-sub {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+/* 当播放器显示时，聊天内容区域底部留出空间 */
+body:has(.music-player[style*="flex"]) .messages-area {
+  padding-bottom: 56px;
+}
