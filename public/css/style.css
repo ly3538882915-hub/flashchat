@@ -3241,3 +3241,797 @@ body.font-cartoon .mail-view-content {
     font-size: 14px;
   }
 }
+
+/* ============================================================
+   V0.7 新增：苹果风格丝滑动画增强
+   ============================================================ */
+
+/* 所有按钮统一苹果风格缓动 */
+button, .btn-primary, .btn-danger, .icon-btn, .send-btn, .player-btn,
+.sidebar-tab, .modal-tab, .auth-tab, .font-switch-btn,
+.admin-action-btn, .friend-action-btn, .swipe-action-btn {
+  transition: all 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+/* 模态框弹性动画增强 */
+.modal {
+  animation: modalInApple 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes modalInApple {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* 侧边栏切换使用 iOS 风格弹簧曲线 */
+.sidebar, .chat-main {
+  transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* 消息气泡滑入动画 */
+.message-row {
+  animation: messageSlideIn 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+@keyframes messageSlideIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 头像悬停微放大 */
+.avatar {
+  transition: transform 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.avatar:hover {
+  transform: scale(1.08);
+}
+
+/* 列表项悬停微抬升 */
+.conversation-item:hover,
+.friend-list-item:hover,
+.admin-user-item:hover,
+.music-list-item:hover,
+.mail-list-item:hover {
+  transform: translateY(-1px);
+  transition: transform 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+/* 输入框获得焦点 box-shadow 渐变动画 */
+.form-group input:focus,
+#message-input:focus,
+.modal-pane input:focus,
+.modal-pane textarea:focus {
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.15);
+  transition: box-shadow 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+/* 底部播放器展开/收起动画 */
+.music-player {
+  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.3s ease;
+}
+
+/* 手机端模态框从底部滑入（iOS Action Sheet 风格） */
+@media (max-width: 768px) {
+  .modal {
+    animation: modalSlideUp 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  @keyframes modalSlideUp {
+    from { opacity: 0; transform: translateY(100%); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+/* 内容渐显效果 */
+.chat-content, .conversation-list, .friends-panel, .music-panel, .mail-panel, .admin-panel {
+  animation: contentFadeIn 0.4s ease;
+}
+
+@keyframes contentFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* 弹窗出现时给 body 添加 overflow:hidden 防止滚动穿透 */
+body.modal-open {
+  overflow: hidden;
+}
+
+/* ============================================================
+   V0.7 新增：主题切换按钮
+   ============================================================ */
+.theme-toggle-btn {
+  position: relative;
+  margin-right: 4px;
+}
+
+.theme-toggle-btn .theme-icon-light,
+.theme-toggle-btn .theme-icon-dark {
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* 浅色模式显示月亮（可切换到深色） */
+.theme-toggle-btn .theme-icon-light { display: inline; }
+.theme-toggle-btn .theme-icon-dark { display: none; }
+
+/* 深色模式显示太阳（可切换到浅色） */
+[data-theme="dark"] .theme-toggle-btn .theme-icon-light { display: none; }
+[data-theme="dark"] .theme-toggle-btn .theme-icon-dark { display: inline; }
+
+/* 主题切换全局过渡 */
+* {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+/* ============================================================
+   V0.7 新增：会员系统样式
+   ============================================================ */
+
+/* 皇冠会员（管理员）— 金色闪烁 */
+.crown-member {
+  color: #FFD700 !important;
+  animation: crownShine 1.5s ease-in-out infinite;
+}
+
+@keyframes crownShine {
+  0%, 100% { text-shadow: 0 0 5px rgba(255, 215, 0, 0.5); }
+  50% { text-shadow: 0 0 15px rgba(255, 215, 0, 1), 0 0 25px rgba(255, 215, 0, 0.8); }
+}
+
+/* 铂金会员（超管）— 自定义/银色 */
+.platinum-member {
+  color: var(--platinum-color, #C0C0C0) !important;
+}
+
+/* 会员信息区域 */
+.membership-info-section {
+  padding: 12px 0;
+  margin-bottom: 8px;
+}
+
+.membership-info-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.membership-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.membership-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.membership-badge.membership-free {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.membership-badge.membership-platinum {
+  background: linear-gradient(135deg, #E8E8E8, #C0C0C0);
+  color: #333;
+}
+
+.membership-badge.membership-crown {
+  background: linear-gradient(135deg, #FFD700, #FFA500);
+  color: #333;
+}
+
+.membership-color-picker {
+  margin-top: 12px;
+}
+
+.membership-color-picker label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.color-picker-row {
+  display: flex;
+  gap: 8px;
+}
+
+.color-picker-row input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+}
+
+.color-picker-hint {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+}
+
+/* 角色标记 */
+.role-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.role-badge.superadmin {
+  background: linear-gradient(135deg, #E8E8E8, #B0B0B0);
+  color: #333;
+}
+
+.role-badge.admin {
+  background: linear-gradient(135deg, #FFD700, #FFA500);
+  color: #333;
+}
+
+/* ============================================================
+   V0.7 新增：管理员上线通知横幅
+   ============================================================ */
+.admin-online-banner {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--primary);
+  color: #fff;
+  padding: 10px 24px;
+  border-radius: 24px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 4px 20px rgba(var(--primary-rgb), 0.4);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.admin-online-icon {
+  font-size: 18px;
+}
+
+/* 抖动动画 */
+.admin-online-banner.shake-banner {
+  animation: bannerShake 0.5s ease;
+}
+
+@keyframes bannerShake {
+  0%, 100% { transform: translateX(-50%); }
+  20% { transform: translateX(calc(-50% - 5px)); }
+  40% { transform: translateX(calc(-50% + 5px)); }
+  60% { transform: translateX(calc(-50% - 5px)); }
+  80% { transform: translateX(calc(-50% + 5px)); }
+}
+
+/* ============================================================
+   V0.7 新增：图片消息样式
+   ============================================================ */
+.message-image-container {
+  margin: 4px 0;
+}
+
+.message-image {
+  max-width: 240px;
+  max-height: 240px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: block;
+  object-fit: cover;
+  transition: transform 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.message-image:hover {
+  transform: scale(1.02);
+}
+
+/* 图片预览弹窗 */
+.image-preview-overlay {
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.85);
+}
+
+.image-preview-container {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-preview-container img {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.image-preview-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  z-index: 10;
+}
+
+.image-preview-close:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+/* ============================================================
+   V0.7 新增：动图消息样式
+   ============================================================ */
+.message-sticker-container {
+  margin: 4px 0;
+}
+
+.message-sticker {
+  font-size: 60px;
+  line-height: 1.2;
+  display: inline-block;
+}
+
+/* 动图 CSS 动画效果 */
+.sticker-spin {
+  animation: stickerSpin 2s linear infinite;
+}
+
+@keyframes stickerSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.sticker-heartbeat {
+  animation: stickerHeartbeat 1s ease-in-out infinite;
+}
+
+@keyframes stickerHeartbeat {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+}
+
+.sticker-shake {
+  animation: stickerShake 0.3s ease-in-out infinite;
+}
+
+@keyframes stickerShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+.sticker-bounce {
+  animation: stickerBounce 0.6s ease-in-out infinite;
+}
+
+@keyframes stickerBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-15px); }
+}
+
+.sticker-pulse {
+  animation: stickerPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes stickerPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.7; }
+}
+
+/* 动图选择面板 */
+.sticker-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 12px;
+}
+
+.sticker-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px 8px;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.sticker-item:hover {
+  background: var(--bg-hover);
+  transform: translateY(-2px);
+}
+
+.sticker-icon {
+  font-size: 36px;
+}
+
+.sticker-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* 表情/动图 Tab 切换 */
+.emoji-panel-tabs {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+}
+
+.emoji-panel-tab {
+  flex: 1;
+  padding: 8px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  transition: all 0.2s ease;
+}
+
+.emoji-panel-tab.active {
+  color: var(--primary);
+  background: var(--bg-secondary);
+}
+
+.sticker-panel-content {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+/* ============================================================
+   V0.7 新增：附件菜单
+   ============================================================ */
+.attach-menu {
+  position: absolute;
+  bottom: 60px;
+  left: 16px;
+  background: var(--bg);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  padding: 8px;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+  animation: menuSlideUp 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+@keyframes menuSlideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.attach-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text);
+  transition: background 0.2s ease;
+}
+
+.attach-menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.attach-menu-icon {
+  font-size: 20px;
+}
+
+/* ============================================================
+   V0.7 新增：左滑操作菜单
+   ============================================================ */
+.conversation-item {
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.swipe-actions {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: stretch;
+  z-index: 1;
+}
+
+.swipe-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  min-width: 46px;
+  white-space: nowrap;
+}
+
+.swipe-action-btn.pin {
+  background: var(--primary);
+}
+
+.swipe-action-btn.unread {
+  background: #FF9800;
+}
+
+.swipe-action-btn.delete {
+  background: var(--red);
+}
+
+.swipe-action-btn:first-child {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+/* 置顶标识 */
+.conversation-item.pinned {
+  background: var(--bg-tertiary);
+}
+
+.pin-icon {
+  font-size: 12px;
+  margin-left: 4px;
+  opacity: 0.7;
+}
+
+/* ============================================================
+   V0.7 新增：关于软件弹窗
+   ============================================================ */
+.about-modal {
+  max-width: 400px;
+  text-align: center;
+}
+
+.about-content {
+  padding: 32px 24px;
+}
+
+.about-logo h2 {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 24px;
+}
+
+.about-info {
+  text-align: left;
+  line-height: 2;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.about-info p {
+  margin-bottom: 4px;
+}
+
+.about-copyright {
+  text-align: center;
+  margin-top: 16px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+/* ============================================================
+   V0.7 新增：手机端返回导航增强
+   ============================================================ */
+@media (max-width: 768px) {
+  .back-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* 会话列表和聊天区域的单栏切换 */
+  .sidebar {
+    width: 100%;
+    min-width: 100%;
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+  }
+
+  .chat-main {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    transform: translateX(100%);
+  }
+
+  .chat-main.mobile-show {
+    transform: translateX(0);
+    z-index: 15;
+  }
+
+  /* 左滑操作在手机端启用 */
+  .swipe-actions {
+    display: flex;
+  }
+
+  /* 附件菜单手机端适配 */
+  .attach-menu {
+    left: 8px;
+    bottom: 56px;
+  }
+
+  /* 管理员上线横幅手机端适配 */
+  .admin-online-banner {
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    transform: none;
+    font-size: 13px;
+    padding: 8px 16px;
+    justify-content: center;
+  }
+
+  .admin-online-banner.shake-banner {
+    animation: bannerShakeMobile 0.5s ease;
+  }
+
+  @keyframes bannerShakeMobile {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-5px); }
+    40% { transform: translateX(5px); }
+    60% { transform: translateX(-5px); }
+    80% { transform: translateX(5px); }
+  }
+
+  /* 动图选择面板手机端适配 */
+  .sticker-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* 主题切换按钮和时钟手机端适配 */
+  .theme-toggle-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .clock-widget {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+}
+
+/* 桌面端隐藏左滑操作 */
+@media (min-width: 769px) {
+  .swipe-actions {
+    display: none;
+  }
+
+  .back-btn {
+    display: none !important;
+  }
+}
+
+/* ============================================================
+   V0.7 新增：弹窗 z-index 统一管理
+   ============================================================ */
+.modal-overlay {
+  z-index: 1000;
+}
+
+.image-preview-overlay {
+  z-index: 10000;
+}
+
+.admin-online-banner {
+  z-index: 9999;
+}
+
+.attach-menu {
+  z-index: 1001;
+}
+
+/* 弹窗内最大高度限制（手机端防溢出） */
+@media (max-width: 768px) {
+  .modal {
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+}
+
+/* ============================================================
+   V0.7 新增：深色模式增强
+   ============================================================ */
+[data-theme="dark"] .attach-menu {
+  background: var(--bg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] .admin-online-banner {
+  box-shadow: 0 4px 20px rgba(var(--primary-rgb), 0.3);
+}
+
+[data-theme="dark"] .sticker-item {
+  background: var(--bg-secondary);
+}
+
+[data-theme="dark"] .sticker-item:hover {
+  background: var(--bg-hover);
+}
+
+[data-theme="dark"] .membership-badge.membership-platinum {
+  background: linear-gradient(135deg, #A8A8A8, #808080);
+  color: #fff;
+}
+
+[data-theme="dark"] .membership-badge.membership-crown {
+  background: linear-gradient(135deg, #FFD700, #DAA520);
+  color: #1a1a1a;
+}
+
+[data-theme="dark"] .membership-badge.membership-free {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .role-badge.superadmin {
+  background: linear-gradient(135deg, #A8A8A8, #707070);
+  color: #fff;
+}
+
+[data-theme="dark"] .emoji-panel-tab.active {
+  background: var(--bg-tertiary);
+}
+
+/* ============================================================
+   V0.7 新增：按钮操作样式（提升/撤销超管）
+   ============================================================ */
+.admin-action-btn.promote {
+  background: #7B1FA2;
+  color: #fff;
+}
+
+.admin-action-btn.promote:hover {
+  background: #6A1B9A;
+}
+
+.admin-action-btn.demote {
+  background: #757575;
+  color: #fff;
+}
+
+.admin-action-btn.demote:hover {
+  background: #616161;
+}
+
+/* 关于按钮样式 */
+.about-btn {
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.about-btn:hover {
+  opacity: 1;
+}
