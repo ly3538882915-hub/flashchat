@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FlashChat</title>
+  <title>Telegram FlashChat</title>
   <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body class="chat-body">
@@ -327,6 +327,55 @@
           <button class="btn-primary" id="save-profile-btn">保存</button>
           <hr class="divider" />
           <button class="btn-danger" id="logout-btn">退出登录</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- V0.66 新增：群信息弹窗 -->
+    <div class="modal-overlay" id="group-info-modal" style="display:none;">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>群聊信息</h3>
+          <button class="icon-btn" id="close-group-info-btn">×</button>
+        </div>
+        <div class="modal-pane active">
+          <!-- 群名（可编辑，仅群主） -->
+          <div class="form-group">
+            <label>群名称</label>
+            <input type="text" id="group-info-name" placeholder="群名称" />
+          </div>
+          <!-- 群公告（可编辑，仅群主） -->
+          <div class="form-group">
+            <label>群公告</label>
+            <textarea id="group-info-notice" placeholder="群公告内容" rows="3"></textarea>
+          </div>
+          <!-- 群主保存按钮 -->
+          <button class="btn-primary" id="save-group-info-btn" style="display:none;">保存修改</button>
+          <!-- 成员列表 -->
+          <div class="form-group">
+            <label>群成员 (<span id="group-member-count">0</span>)</label>
+            <div class="group-member-list" id="group-member-list"></div>
+          </div>
+          <!-- 邀请成员按钮 -->
+          <button class="btn-primary btn-sm" id="invite-member-btn">邀请新成员</button>
+          <!-- 退出群聊按钮 -->
+          <button class="btn-danger" id="leave-group-btn">退出群聊</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- V0.66 新增：邀请成员弹窗 -->
+    <div class="modal-overlay" id="invite-modal" style="display:none;">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>邀请好友入群</h3>
+          <button class="icon-btn" id="close-invite-btn">×</button>
+        </div>
+        <div class="modal-pane active">
+          <div class="user-search-results" id="invite-friend-list">
+            <p class="modal-hint">加载中...</p>
+          </div>
+          <button class="btn-primary" id="confirm-invite-btn" disabled>邀请选中好友</button>
         </div>
       </div>
     </div>
