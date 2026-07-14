@@ -81,6 +81,11 @@
     mails: [],                 // 邮件列表
     unreadMails: 0,            // 未读邮件数
     musicSuggestions: [],      // 音乐建议列表
+    // V0.66 新增：群聊信息
+    groupInfoConvId: null,     // 当前打开群信息弹窗的会话ID
+    groupInfoMembers: [],      // 群成员列表
+    inviteSelectedFriends: [], // 邀请弹窗中选中的好友
+    inviteConvId: null,        // 当前邀请好友入群的会话ID
   };
 
   // ============================================================
@@ -196,6 +201,23 @@
     avatarUploadArea: document.getElementById('avatar-upload-area'),
     avatarUploadPreview: document.getElementById('avatar-upload-preview'),
     avatarFileInput: document.getElementById('avatar-file-input'),
+    // V0.66 新增：群信息弹窗
+    groupInfoModal: document.getElementById('group-info-modal'),
+    closeGroupInfoBtn: document.getElementById('close-group-info-btn'),
+    groupInfoName: document.getElementById('group-info-name'),
+    groupInfoNotice: document.getElementById('group-info-notice'),
+    saveGroupInfoBtn: document.getElementById('save-group-info-btn'),
+    groupMemberCount: document.getElementById('group-member-count'),
+    groupMemberList: document.getElementById('group-member-list'),
+    inviteMemberBtn: document.getElementById('invite-member-btn'),
+    leaveGroupBtn: document.getElementById('leave-group-btn'),
+    // V0.66 新增：邀请成员弹窗
+    inviteModal: document.getElementById('invite-modal'),
+    closeInviteBtn: document.getElementById('close-invite-btn'),
+    inviteFriendList: document.getElementById('invite-friend-list'),
+    confirmInviteBtn: document.getElementById('confirm-invite-btn'),
+    // V0.66 新增：info-btn 按钮
+    infoBtn: document.getElementById('info-btn'),
   };
 
   // ============================================================
@@ -320,11 +342,17 @@
   }
 
   /** 创建头像元素 */
-  function createAvatar(name, color, size) {
+  function createAvatar(name, color, size, avatarUrl) {
     const avatar = document.createElement('div');
     avatar.className = 'avatar' + (size ? ' ' + size : '');
-    avatar.style.background = color || '#2AABEE';
-    avatar.textContent = getInitial(name);
+    if (avatarUrl) {
+      avatar.style.backgroundImage = 'url(' + avatarUrl + ')';
+      avatar.style.backgroundSize = 'cover';
+      avatar.style.backgroundPosition = 'center';
+    } else {
+      avatar.style.background = color || '#2AABEE';
+      avatar.textContent = getInitial(name);
+    }
     return avatar;
   }
 
@@ -460,6 +488,55 @@
         loadMails();
       }
     });
+
+    // V0.66 新增：群信息更新通知
+    state.socket.on('group_info_updated', (data) => {
+      // 更新会话列表中的群名
+      const conv = state.conversations.find((c) => c.id === data.conversationId);
+      if (conv) {
+        conv.name = data.name;
+        if (data.description !== undefined) {
+          conv.description = data.description;
+        }
+        renderConversationList();
+        // 如果是当前打开的会话，更新头部
+        if (state.currentConvId === data.conversationId) {
+          el.headerName.textContent = data.name || '(未命名)';
+        }
+      }
+      // 如果群信息弹窗正打开，刷新
+      if (state.groupInfoConvId === data.conversationId) {
+        openGroupInfo(data.conversationId);
+      }
+    });
+
+    // V0.66 新增：有新成员加入群聊
+    state.socket.on('members_added', (data) => {
+      if (state.currentConvId === data.conversationId) {
+        loadConversationInfo(data.conversationId);
+      }
+      // 如果群信息弹窗正打开，刷新成员列表
+      if (state.groupInfoConvId === data.conversationId) {
+        openGroupInfo(data.conversationId);
+      }
+    });
+
+    // V0.66 新增：被加入新群聊
+    state.socket.on('added_to_group', (data) => {
+      showToast('您已被加入群聊：' + (data.conversation ? data.conversation.name : '新群聊'), 'success');
+      loadConversations();
+    });
+
+    // V0.66 新增：有成员退出群聊
+    state.socket.on('member_left', (data) => {
+      if (state.currentConvId === data.conversationId) {
+        loadConversationInfo(data.conversationId);
+      }
+      // 如果群信息弹窗正打开，刷新成员列表
+      if (state.groupInfoConvId === data.conversationId) {
+        openGroupInfo(data.conversationId);
+      }
+    });
   }
 
   // ============================================================
@@ -510,7 +587,7 @@
     if (conv.id === state.currentConvId) item.classList.add('active');
     item.dataset.convId = conv.id;
 
-    const avatar = createAvatar(conv.name, conv.avatarColor);
+    const avatar = createAvatar(conv.name, conv.avatarColor, null, conv.otherAvatarUrl);
     item.appendChild(avatar);
 
     const body = document.createElement('div');
@@ -624,8 +701,21 @@
 
       if (conv) {
         el.headerName.textContent = conv.name || '(未命名)';
-        el.headerAvatar.style.background = conv.avatarColor || '#2AABEE';
-        el.headerAvatar.textContent = getInitial(conv.name);
+        // V0.66 新增：私聊会话显示对方头像，群聊显示默认头像
+        // 先清除之前可能设置的背景图片和背景色
+        el.headerAvatar.style.background = '';
+        el.headerAvatar.style.backgroundImage = '';
+        el.headerAvatar.style.backgroundSize = '';
+        el.headerAvatar.style.backgroundPosition = '';
+        if (conv.type === 'private' && conv.otherAvatarUrl) {
+          el.headerAvatar.style.backgroundImage = 'url(' + conv.otherAvatarUrl + ')';
+          el.headerAvatar.style.backgroundSize = 'cover';
+          el.headerAvatar.style.backgroundPosition = 'center';
+          el.headerAvatar.textContent = '';
+        } else {
+          el.headerAvatar.style.background = conv.avatarColor || '#2AABEE';
+          el.headerAvatar.textContent = getInitial(conv.name);
+        }
       }
 
       const res = await apiFetch(`/api/conversations/${convId}/members`);
@@ -1184,7 +1274,7 @@
         item.className = 'user-result-item';
         item.dataset.userId = user.id;
 
-        const avatar = createAvatar(user.nickname, user.avatarColor, 'sm');
+        const avatar = createAvatar(user.nickname, user.avatarColor, 'sm', user.avatarUrl);
         item.appendChild(avatar);
 
         const info = document.createElement('div');
@@ -1265,7 +1355,7 @@
       const chip = document.createElement('div');
       chip.className = 'selected-member-chip';
 
-      const avatar = createAvatar(user.nickname, user.avatarColor);
+      const avatar = createAvatar(user.nickname, user.avatarColor, null, user.avatarUrl);
       chip.appendChild(avatar);
 
       const name = document.createElement('span');
@@ -1468,7 +1558,7 @@
       const item = document.createElement('div');
       item.className = 'friend-list-item';
 
-      const avatar = createAvatar(friend.nickname, friend.avatarColor);
+      const avatar = createAvatar(friend.nickname, friend.avatarColor, null, friend.avatarUrl);
       item.appendChild(avatar);
 
       const info = document.createElement('div');
@@ -1527,7 +1617,7 @@
       const item = document.createElement('div');
       item.className = 'friend-request-item';
 
-      const avatar = createAvatar(req.from.nickname, req.from.avatarColor, 'sm');
+      const avatar = createAvatar(req.from.nickname, req.from.avatarColor, 'sm', req.from.avatarUrl);
       item.appendChild(avatar);
 
       const info = document.createElement('div');
@@ -1911,9 +2001,17 @@
       // 头像
       var avatar = document.createElement('div');
       avatar.className = 'avatar admin-user-avatar';
-      avatar.style.background = user.avatarColor || '#2AABEE';
-      var initial = (user.nickname || user.username || '?').charAt(0).toUpperCase();
-      avatar.textContent = initial;
+      // V0.66 新增：如果用户有自定义头像，使用图片
+      if (user.avatarUrl) {
+        avatar.style.backgroundImage = 'url(' + user.avatarUrl + ')';
+        avatar.style.backgroundSize = 'cover';
+        avatar.style.backgroundPosition = 'center';
+        avatar.textContent = '';
+      } else {
+        avatar.style.background = user.avatarColor || '#2AABEE';
+        var initial = (user.nickname || user.username || '?').charAt(0).toUpperCase();
+        avatar.textContent = initial;
+      }
       item.appendChild(avatar);
 
       // 信息
@@ -2314,6 +2412,345 @@
   }
 
   // ============================================================
+  // V0.66 新增：群聊管理功能
+  // ============================================================
+
+  /**
+   * 打开群信息弹窗，加载群名、公告、成员列表
+   * @param {string} convId - 会话ID
+   */
+  async function openGroupInfo(convId) {
+    state.groupInfoConvId = convId;
+    var conv = state.conversations.find(function(c) { return c.id === convId; });
+
+    // 重置弹窗内容
+    el.groupInfoName.value = '';
+    el.groupInfoNotice.value = '';
+    el.groupInfoName.disabled = true;
+    el.groupInfoNotice.disabled = true;
+    el.saveGroupInfoBtn.style.display = 'none';
+    el.groupMemberList.innerHTML = '<p class="modal-hint">加载中...</p>';
+    el.groupMemberCount.textContent = '0';
+
+    el.groupInfoModal.style.display = 'flex';
+
+    // 加载会话详情（获取群名、公告、创建者）
+    try {
+      // 重新获取会话详情以获取最新的 description
+      var res = await apiFetch('/api/conversations');
+      if (res.ok) {
+        var data = await res.json();
+        var convs = data.conversations || [];
+        var found = convs.find(function(c) { return c.id === convId; });
+        if (found) {
+          // 更新 state 中的会话信息
+          var existingConv = state.conversations.find(function(c) { return c.id === convId; });
+          if (existingConv) {
+            existingConv.description = found.description;
+            existingConv.createdBy = found.createdBy;
+          }
+          conv = found;
+        }
+      }
+    } catch (err) {
+      console.error('加载会话详情失败:', err);
+    }
+
+    if (conv) {
+      el.groupInfoName.value = conv.name || '';
+      el.groupInfoNotice.value = conv.description || '';
+
+      // 判断当前用户是否是群主
+      var isOwner = conv.createdBy === currentUser.id;
+      if (isOwner) {
+        el.groupInfoName.disabled = false;
+        el.groupInfoNotice.disabled = false;
+        el.saveGroupInfoBtn.style.display = 'block';
+      } else {
+        el.groupInfoName.disabled = true;
+        el.groupInfoNotice.disabled = true;
+        el.saveGroupInfoBtn.style.display = 'none';
+      }
+    }
+
+    // 加载群成员列表
+    try {
+      var memberRes = await apiFetch('/api/conversations/' + convId + '/members');
+      if (memberRes.ok) {
+        var memberData = await memberRes.json();
+        var members = memberData.members || [];
+        state.groupInfoMembers = members;
+        renderGroupMembers(members, conv);
+      }
+    } catch (err) {
+      console.error('加载群成员失败:', err);
+      el.groupMemberList.innerHTML = '<p class="modal-hint">加载成员失败</p>';
+    }
+  }
+
+  /**
+   * 渲染群成员列表
+   * @param {Array} members - 成员列表
+   * @param {Object} conv - 会话对象
+   */
+  function renderGroupMembers(members, conv) {
+    el.groupMemberList.innerHTML = '';
+    el.groupMemberCount.textContent = members.length;
+
+    if (members.length === 0) {
+      el.groupMemberList.innerHTML = '<p class="modal-hint">暂无成员</p>';
+      return;
+    }
+
+    members.forEach(function(m) {
+      var item = document.createElement('div');
+      item.className = 'group-member-item';
+
+      // 头像（V0.66：支持自定义头像）
+      var avatar = createAvatar(m.nickname, m.avatarColor, null, m.avatarUrl);
+      item.appendChild(avatar);
+
+      // 信息
+      var info = document.createElement('div');
+      info.className = 'group-member-info';
+
+      var nameRow = document.createElement('div');
+      nameRow.className = 'group-member-name';
+      nameRow.textContent = m.nickname || m.username || '未知用户';
+
+      // 群主标记
+      if (conv && conv.createdBy === m.id) {
+        var ownerBadge = document.createElement('span');
+        ownerBadge.className = 'group-owner-badge';
+        ownerBadge.textContent = '群主';
+        nameRow.appendChild(ownerBadge);
+      }
+
+      info.appendChild(nameRow);
+
+      var status = document.createElement('div');
+      status.className = 'group-member-status' + (m.online ? ' online' : '');
+      status.textContent = m.online ? '在线' : '离线';
+      info.appendChild(status);
+
+      item.appendChild(info);
+      el.groupMemberList.appendChild(item);
+    });
+  }
+
+  /**
+   * 群主保存群名和群公告
+   */
+  async function saveGroupInfo() {
+    var convId = state.groupInfoConvId;
+    if (!convId) return;
+
+    var name = el.groupInfoName.value.trim();
+    var description = el.groupInfoNotice.value.trim();
+
+    if (!name) {
+      showToast('群名称不能为空', 'error');
+      return;
+    }
+
+    try {
+      var res = await apiFetch('/api/conversations/' + convId + '/group-info', {
+        method: 'PUT',
+        body: JSON.stringify({ name: name, description: description }),
+      });
+      var data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || '保存失败', 'error');
+        return;
+      }
+      showToast('群信息已更新', 'success');
+
+      // 更新本地会话信息
+      var conv = state.conversations.find(function(c) { return c.id === convId; });
+      if (conv) {
+        conv.name = name;
+        conv.description = description;
+      }
+      // 更新头部
+      if (state.currentConvId === convId) {
+        el.headerName.textContent = name || '(未命名)';
+      }
+      renderConversationList();
+    } catch (err) {
+      console.error('保存群信息失败:', err);
+      showToast('保存失败', 'error');
+    }
+  }
+
+  /**
+   * 退出群聊
+   * @param {string} convId - 会话ID
+   */
+  async function leaveGroup(convId) {
+    if (!convId) return;
+    if (!confirm('确定退出此群聊吗？')) return;
+
+    try {
+      var res = await apiFetch('/api/conversations/' + convId + '/members', {
+        method: 'DELETE',
+      });
+      var data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || '退出群聊失败', 'error');
+        return;
+      }
+      showToast('已退出群聊', 'info');
+
+      // 关闭群信息弹窗
+      el.groupInfoModal.style.display = 'none';
+      state.groupInfoConvId = null;
+
+      // 从会话列表中移除该会话
+      state.conversations = state.conversations.filter(function(c) { return c.id !== convId; });
+
+      // 如果当前正在查看该会话，返回空状态
+      if (state.currentConvId === convId) {
+        state.currentConvId = null;
+        state.currentConv = null;
+        state.messages = [];
+        el.chatContent.style.display = 'none';
+        el.chatEmpty.style.display = 'flex';
+        el.chatContent.classList.remove('mobile-show');
+      }
+
+      renderConversationList();
+    } catch (err) {
+      console.error('退出群聊失败:', err);
+      showToast('退出群聊失败', 'error');
+    }
+  }
+
+  /**
+   * 打开邀请弹窗，显示好友列表
+   * @param {string} convId - 会话ID
+   */
+  async function openInviteModal(convId) {
+    state.inviteConvId = convId;
+    state.inviteSelectedFriends = [];
+    el.inviteFriendList.innerHTML = '<p class="modal-hint">加载中...</p>';
+    el.confirmInviteBtn.disabled = true;
+    el.inviteModal.style.display = 'flex';
+
+    // 加载好友列表
+    try {
+      var res = await apiFetch('/api/friends');
+      if (!res.ok) {
+        el.inviteFriendList.innerHTML = '<p class="modal-hint">加载好友列表失败</p>';
+        return;
+      }
+      var data = await res.json();
+      var friends = data.friends || [];
+
+      // 获取当前群成员列表，过滤掉已是成员的好友
+      var memberRes = await apiFetch('/api/conversations/' + convId + '/members');
+      var existingMemberIds = [];
+      if (memberRes.ok) {
+        var memberData = await memberRes.json();
+        var members = memberData.members || [];
+        existingMemberIds = members.map(function(m) { return m.id; });
+      }
+
+      var availableFriends = friends.filter(function(f) {
+        return existingMemberIds.indexOf(f.id) === -1;
+      });
+
+      if (availableFriends.length === 0) {
+        el.inviteFriendList.innerHTML = '<p class="modal-hint">没有可邀请的好友（所有好友已在群中）</p>';
+        return;
+      }
+
+      renderInviteFriendList(availableFriends);
+    } catch (err) {
+      console.error('加载好友列表失败:', err);
+      el.inviteFriendList.innerHTML = '<p class="modal-hint">加载好友列表失败</p>';
+    }
+  }
+
+  /**
+   * 渲染可邀请的好友列表
+   * @param {Array} friends - 好友列表
+   */
+  function renderInviteFriendList(friends) {
+    el.inviteFriendList.innerHTML = '';
+    friends.forEach(function(friend) {
+      var item = document.createElement('div');
+      item.className = 'invite-friend-item';
+      item.dataset.userId = friend.id;
+
+      var avatar = createAvatar(friend.nickname, friend.avatarColor, null, friend.avatarUrl);
+      item.appendChild(avatar);
+
+      var info = document.createElement('div');
+      info.className = 'invite-friend-info';
+
+      var name = document.createElement('div');
+      name.className = 'invite-friend-name';
+      name.textContent = friend.nickname;
+      info.appendChild(name);
+
+      item.appendChild(info);
+
+      // 选择框
+      var check = document.createElement('div');
+      check.className = 'invite-friend-check';
+      item.appendChild(check);
+
+      item.addEventListener('click', function() {
+        var idx = state.inviteSelectedFriends.indexOf(friend.id);
+        if (idx >= 0) {
+          state.inviteSelectedFriends.splice(idx, 1);
+          item.classList.remove('selected');
+        } else {
+          state.inviteSelectedFriends.push(friend.id);
+          item.classList.add('selected');
+        }
+        el.confirmInviteBtn.disabled = state.inviteSelectedFriends.length === 0;
+      });
+
+      el.inviteFriendList.appendChild(item);
+    });
+  }
+
+  /**
+   * 确认邀请好友入群
+   */
+  async function confirmInvite() {
+    var convId = state.inviteConvId;
+    if (!convId || state.inviteSelectedFriends.length === 0) return;
+
+    try {
+      var res = await apiFetch('/api/conversations/' + convId + '/members', {
+        method: 'POST',
+        body: JSON.stringify({ userIds: state.inviteSelectedFriends }),
+      });
+      var data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || '邀请失败', 'error');
+        return;
+      }
+      showToast('已邀请 ' + (data.addedCount || state.inviteSelectedFriends.length) + ' 位好友入群', 'success');
+
+      // 关闭邀请弹窗
+      el.inviteModal.style.display = 'none';
+      state.inviteSelectedFriends = [];
+      state.inviteConvId = null;
+
+      // 刷新群信息弹窗的成员列表
+      if (state.groupInfoConvId === convId) {
+        openGroupInfo(convId);
+      }
+    } catch (err) {
+      console.error('邀请好友入群失败:', err);
+      showToast('邀请失败', 'error');
+    }
+  }
+
+  // ============================================================
   // 事件绑定
   // ============================================================
   function bindEvents() {
@@ -2561,6 +2998,81 @@
           if (box) box.style.display = 'none';
         }, 200);
       });
+    }
+
+    // V0.66 新增：群信息弹窗事件绑定
+    // info-btn 按钮点击事件
+    if (el.infoBtn) {
+      el.infoBtn.addEventListener('click', function() {
+        if (state.currentConvId && state.currentConv) {
+          if (state.currentConv.type === 'group') {
+            openGroupInfo(state.currentConvId);
+          } else {
+            // 私聊：显示对方信息（简单提示）
+            var conv = state.currentConv;
+            var otherMember = state.memberCache.values().next().value;
+            showToast('私聊会话：' + (conv.name || '未知'), 'info');
+          }
+        }
+      });
+    }
+
+    // 关闭群信息弹窗
+    if (el.closeGroupInfoBtn) {
+      el.closeGroupInfoBtn.addEventListener('click', function() {
+        el.groupInfoModal.style.display = 'none';
+        state.groupInfoConvId = null;
+      });
+    }
+    if (el.groupInfoModal) {
+      el.groupInfoModal.addEventListener('click', function(e) {
+        if (e.target === el.groupInfoModal) {
+          el.groupInfoModal.style.display = 'none';
+          state.groupInfoConvId = null;
+        }
+      });
+    }
+
+    // 保存群信息
+    if (el.saveGroupInfoBtn) {
+      el.saveGroupInfoBtn.addEventListener('click', saveGroupInfo);
+    }
+
+    // 退出群聊
+    if (el.leaveGroupBtn) {
+      el.leaveGroupBtn.addEventListener('click', function() {
+        leaveGroup(state.groupInfoConvId);
+      });
+    }
+
+    // 邀请成员
+    if (el.inviteMemberBtn) {
+      el.inviteMemberBtn.addEventListener('click', function() {
+        openInviteModal(state.groupInfoConvId);
+      });
+    }
+
+    // 关闭邀请弹窗
+    if (el.closeInviteBtn) {
+      el.closeInviteBtn.addEventListener('click', function() {
+        el.inviteModal.style.display = 'none';
+        state.inviteSelectedFriends = [];
+        state.inviteConvId = null;
+      });
+    }
+    if (el.inviteModal) {
+      el.inviteModal.addEventListener('click', function(e) {
+        if (e.target === el.inviteModal) {
+          el.inviteModal.style.display = 'none';
+          state.inviteSelectedFriends = [];
+          state.inviteConvId = null;
+        }
+      });
+    }
+
+    // 确认邀请
+    if (el.confirmInviteBtn) {
+      el.confirmInviteBtn.addEventListener('click', confirmInvite);
     }
 
     // 涟漪效果绑定到按钮
