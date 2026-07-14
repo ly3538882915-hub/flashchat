@@ -23,7 +23,7 @@ const multer = require('multer');
 // ============================================================
 // 配置常量
 // ============================================================
-const APP_VERSION = 'v0.4';
+const APP_VERSION = 'v0.6';
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0'; // 监听所有网络接口，允许局域网访问
 const JWT_SECRET = process.env.JWT_SECRET || 'flashchat-secret-key-v0.2-please-change-in-production';
@@ -34,6 +34,45 @@ const MESSAGES_PAGE_SIZE = 20;
 const SERVER_START_TIME = new Date().toISOString();
 const MUSIC_DIR = path.join(DB_DIR, 'music');
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || '';
+
+// V0.6 新增：头像上传目录
+const AVATAR_DIR = path.join(DB_DIR, 'avatars');
+if (!fs.existsSync(AVATAR_DIR)) {
+  fs.mkdirSync(AVATAR_DIR, { recursive: true });
+}
+
+// V0.6 新增：违禁词列表（用户名和昵称中不可包含）
+const BANNED_WORDS = [
+  'sb', 'SB', '傻逼', '傻子', '操你', '草泥马', '日你', 'fuck', 'shit',
+  'bitch', 'bastard', '智障', '废物', '滚蛋', '去死', '贱人', '婊子',
+  '妈的', '他妈', '你妈', '王八蛋', '混蛋', '畜生', '狗屎', 'crap',
+  'dick', 'pussy', 'asshole', 'nigger', ' Nazi', '纳粹'
+];
+
+// V0.6 新增：软件公告内容（管理员可后续修改）
+const ANNOUNCEMENT = {
+  version: 'v0.6',
+  title: 'FlashChat V0.6 更新公告',
+  content: [
+    '欢迎使用 FlashChat V0.6！本次更新带来以下新功能：',
+    '',
+    '1. 好友系统完善 - 支持删除好友功能',
+    '2. 管理员系统 - 封禁违规账号、发送警告通知',
+    '3. 音乐建议 - 普通用户可提交想听的歌曲建议',
+    '4. 邮件系统 - 用户间可发送邮件消息',
+    '5. 头像上传 - 支持自定义头像上传',
+    '6. 实时时钟 - 右上角显示当前精确时间',
+    '7. 违禁词过滤 - 注册时过滤不当用词',
+    '8. 上传限制提升 - 音乐文件最大支持 300MB',
+    '',
+    '请遵守社区规范，文明交流。违规行为将被管理员处理。',
+    '',
+    '如有问题或建议，请联系管理员。',
+    '',
+    '— FlashChat 团队'
+  ].join('\n'),
+  updatedAt: new Date().toISOString(),
+};
 
 // 头像可选背景色（随机分配给新用户）
 const AVATAR_COLORS = [
@@ -124,7 +163,43 @@ db.exec(`
     uploaded_at TEXT NOT NULL,
     play_count INTEGER DEFAULT 0
   );
+
+  -- V0.6 新增：音乐建议表
+  CREATE TABLE IF NOT EXISTS music_suggestions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    song_name TEXT NOT NULL,
+    artist TEXT,
+    note TEXT,
+    status TEXT DEFAULT 'pending',
+    created_at TEXT NOT NULL
+  );
+
+  -- V0.6 新增：邮件表
+  CREATE TABLE IF NOT EXISTS mails (
+    id TEXT PRIMARY KEY,
+    sender_id TEXT NOT NULL,
+    recipient_id TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    content TEXT NOT NULL,
+    is_read INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL
+  );
+
+  -- V0.6 新增：用户警告表
+  CREATE TABLE IF NOT EXISTS user_warnings (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    warned_by TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
 `);
+
+// V0.6 新增：为 users 表添加新列（兼容已有数据库）
+try { db.exec('ALTER TABLE users ADD COLUMN avatar_url TEXT'); } catch(e) {}
+try { db.exec('ALTER TABLE users ADD COLUMN banned INTEGER DEFAULT 0'); } catch(e) {}
+try { db.exec('ALTER TABLE users ADD COLUMN banned_reason TEXT'); } catch(e) {}
 
 // 预编译语句（参数化查询，防 SQL 注入）
 const stmts = {
@@ -221,6 +296,37 @@ const stmts = {
   getAllMusic: db.prepare('SELECT * FROM music ORDER BY uploaded_at DESC'),
   deleteMusicRow: db.prepare('DELETE FROM music WHERE id = ?'),
   incMusicPlayCount: db.prepare('UPDATE music SET play_count = play_count + 1 WHERE id = ?'),
+
+  // V0.6 新增：音乐建议
+  insertMusicSuggestion: db.prepare(
+    'INSERT INTO music_suggestions (id, user_id, song_name, artist, note, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ),
+  getMusicSuggestions: db.prepare('SELECT * FROM music_suggestions ORDER BY created_at DESC'),
+  deleteMusicSuggestion: db.prepare('DELETE FROM music_suggestions WHERE id = ?'),
+
+  // V0.6 新增：邮件
+  insertMail: db.prepare(
+    'INSERT INTO mails (id, sender_id, recipient_id, subject, content, is_read, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)'
+  ),
+  getMailsByRecipient: db.prepare('SELECT * FROM mails WHERE recipient_id = ? ORDER BY created_at DESC'),
+  getMailById: db.prepare('SELECT * FROM mails WHERE id = ?'),
+  markMailRead: db.prepare('UPDATE mails SET is_read = 1 WHERE id = ?'),
+  getUnreadMailCount: db.prepare('SELECT COUNT(*) as cnt FROM mails WHERE recipient_id = ? AND is_read = 0'),
+  getUserMails: db.prepare('SELECT * FROM mails WHERE recipient_id = ? OR sender_id = ? ORDER BY created_at DESC'),
+
+  // V0.6 新增：用户警告
+  insertWarning: db.prepare(
+    'INSERT INTO user_warnings (id, user_id, warned_by, reason, created_at) VALUES (?, ?, ?, ?, ?)'
+  ),
+  getWarningsByUser: db.prepare('SELECT * FROM user_warnings WHERE user_id = ? ORDER BY created_at DESC'),
+  getWarningCount: db.prepare('SELECT COUNT(*) as cnt FROM user_warnings WHERE user_id = ?'),
+
+  // V0.6 新增：封禁/解封
+  banUser: db.prepare('UPDATE users SET banned = 1, banned_reason = ? WHERE id = ?'),
+  unbanUser: db.prepare('UPDATE users SET banned = 0, banned_reason = NULL WHERE id = ?'),
+
+  // V0.6 新增：头像
+  updateUserAvatar: db.prepare('UPDATE users SET avatar_url = ? WHERE id = ?'),
 };
 
 // ============================================================
@@ -290,7 +396,7 @@ const musicUpload = multer({
       cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
     },
   }),
-  limits: { fileSize: 30 * 1024 * 1024 },
+  limits: { fileSize: 300 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowedExt = /\.(mp3|wav|ogg|m4a|flac|aac)$/i;
     const allowedMime = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/ogg', 'audio/m4a', 'audio/x-m4a', 'audio/flac', 'audio/aac', 'audio/mp4', 'audio/x-aiff', 'application/ogg'];
@@ -298,6 +404,26 @@ const musicUpload = multer({
       cb(null, true);
     } else {
       cb(new Error('仅支持音频文件 (mp3, wav, ogg, m4a, flac, aac)'));
+    }
+  },
+});
+
+// V0.6 新增：头像上传 multer 配置
+const avatarUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, AVATAR_DIR),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname) || '.png';
+      cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedMime = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
+    if (allowedMime.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('仅支持 JPG, PNG, GIF, WebP 格式'));
     }
   },
 });
@@ -318,7 +444,10 @@ function publicUser(user) {
     username: user.username,
     nickname: user.nickname,
     avatarColor: user.avatar_color,
+    avatarUrl: user.avatar_url || null,
     createdAt: user.created_at,
+    banned: !!(user.banned),
+    bannedReason: user.banned_reason || null,
   };
 }
 
@@ -361,6 +490,10 @@ function authMiddleware(req, res, next) {
       return res.status(401).json({ error: '用户不存在' });
     }
     req.user = user;
+    // V0.6 新增：检查封禁状态
+    if (user.banned) {
+      return res.status(403).json({ error: '您的账号已被封禁' + (user.banned_reason ? '，原因：' + user.banned_reason : '') });
+    }
     next();
   } catch (err) {
     return res.status(401).json({ error: '认证令牌无效或已过期' });
@@ -450,6 +583,11 @@ app.get('/api/server-info', (req, res) => {
   });
 });
 
+// V0.6 新增：获取软件公告
+app.get('/api/announcement', (req, res) => {
+  res.json(ANNOUNCEMENT);
+});
+
 // 注册
 app.post('/api/register', (req, res) => {
   const { username, password, nickname } = req.body || {};
@@ -464,6 +602,16 @@ app.post('/api/register', (req, res) => {
   }
   if (!/^[a-zA-Z0-9_]+$/.test(username)) {
     return res.status(400).json({ error: '用户名只能包含字母、数字和下划线' });
+  }
+
+  // V0.6 新增：违禁词检查
+  const lowerUsername = username.toLowerCase();
+  const lowerNickname = (nickname || '').toLowerCase();
+  for (const word of BANNED_WORDS) {
+    const w = word.toLowerCase();
+    if (lowerUsername.includes(w) || lowerNickname.includes(w)) {
+      return res.status(400).json({ error: '用户名或昵称包含违禁词，请修改' });
+    }
   }
 
   const existing = stmts.getUserByUsername.get(username);
@@ -973,16 +1121,196 @@ app.get('/api/admin/users', authMiddleware, (req, res) => {
       onlineUserIds.add(socket.handshake.userId);
     }
   }
-  const userList = users.map(u => ({
-    id: u.id,
-    username: u.username,
-    nickname: u.nickname,
-    avatarColor: u.avatar_color,
-    createdAt: u.created_at,
-    isOnline: onlineUserIds.has(u.id),
-  }));
+  const userList = users.map(u => {
+    const warnCount = stmts.getWarningCount.get(u.id).cnt;
+    return {
+      id: u.id,
+      username: u.username,
+      nickname: u.nickname,
+      avatarColor: u.avatar_color,
+      avatarUrl: u.avatar_url || null,
+      createdAt: u.created_at,
+      isOnline: onlineUserIds.has(u.id),
+      banned: !!(u.banned),
+      bannedReason: u.banned_reason || null,
+      warningCount: warnCount,
+    };
+  });
   res.json({ users: userList, total: totalCount, online: onlineUserIds.size });
 });
+
+// ============================================================
+// V0.6 新增：管理员封禁/警告 + 音乐建议 + 邮件 + 头像上传 API
+// ============================================================
+
+// 管理员封禁用户
+app.post('/api/admin/users/:id/ban', authMiddleware, (req, res) => {
+  if (!isAdmin(req.user)) {
+    return res.status(403).json({ error: '需要管理员权限' });
+  }
+  const targetUser = stmts.getUserById.get(req.params.id);
+  if (!targetUser) {
+    return res.status(404).json({ error: '用户不存在' });
+  }
+  if (isAdmin(targetUser)) {
+    return res.status(400).json({ error: '不能封禁管理员' });
+  }
+  const reason = (req.body && req.body.reason) || '违反社区规范';
+  stmts.banUser.run(reason, targetUser.id);
+  // 实时通知被封禁用户
+  io.to(`user:${targetUser.id}`).emit('banned', { reason });
+  res.json({ ok: true, message: '用户已封禁' });
+});
+
+// 管理员解封用户
+app.post('/api/admin/users/:id/unban', authMiddleware, (req, res) => {
+  if (!isAdmin(req.user)) {
+    return res.status(403).json({ error: '需要管理员权限' });
+  }
+  const targetUser = stmts.getUserById.get(req.params.id);
+  if (!targetUser) {
+    return res.status(404).json({ error: '用户不存在' });
+  }
+  stmts.unbanUser.run(targetUser.id);
+  io.to(`user:${targetUser.id}`).emit('unbanned', {});
+  res.json({ ok: true, message: '用户已解封' });
+});
+
+// 管理员警告用户
+app.post('/api/admin/users/:id/warn', authMiddleware, (req, res) => {
+  if (!isAdmin(req.user)) {
+    return res.status(403).json({ error: '需要管理员权限' });
+  }
+  const targetUser = stmts.getUserById.get(req.params.id);
+  if (!targetUser) {
+    return res.status(404).json({ error: '用户不存在' });
+  }
+  const reason = (req.body && req.body.reason) || '请注意您的行为';
+  const warnId = uuidv4();
+  const createdAt = nowISO();
+  stmts.insertWarning.run(warnId, targetUser.id, req.user.id, reason, createdAt);
+  // 实时通知被警告用户
+  io.to(`user:${targetUser.id}`).emit('warned', { reason, from: publicUser(req.user) });
+  res.json({ ok: true, message: '警告已发送' });
+});
+
+// 获取用户警告记录（管理员可看指定用户，普通用户看自己的）
+app.get('/api/warnings/:userId', authMiddleware, (req, res) => {
+  const userId = req.params.userId;
+  if (userId !== req.user.id && !isAdmin(req.user)) {
+    return res.status(403).json({ error: '无权查看' });
+  }
+  const warnings = stmts.getWarningsByUser.all(userId);
+  const count = stmts.getWarningCount.get(userId).cnt;
+  res.json({ warnings, count });
+});
+
+// 音乐建议 - 提交
+app.post('/api/music/suggestions', authMiddleware, (req, res) => {
+  const { songName, artist, note } = req.body || {};
+  if (!songName || !songName.trim()) {
+    return res.status(400).json({ error: '歌曲名称不能为空' });
+  }
+  const id = uuidv4();
+  const createdAt = nowISO();
+  stmts.insertMusicSuggestion.run(id, req.user.id, songName.trim(), (artist || '').trim(), (note || '').trim(), 'pending', createdAt);
+  res.json({ ok: true, id });
+});
+
+// 音乐建议 - 获取列表
+app.get('/api/music/suggestions', authMiddleware, (req, res) => {
+  const suggestions = stmts.getMusicSuggestions.all().map(s => {
+    const u = stmts.getUserById.get(s.user_id);
+    return {
+      id: s.id,
+      songName: s.song_name,
+      artist: s.artist,
+      note: s.note,
+      status: s.status,
+      createdAt: s.created_at,
+      suggestedBy: u ? { username: u.username, nickname: u.nickname } : null,
+    };
+  });
+  res.json({ suggestions });
+});
+
+// 音乐建议 - 删除（管理员）
+app.delete('/api/music/suggestions/:id', authMiddleware, (req, res) => {
+  if (!isAdmin(req.user)) {
+    return res.status(403).json({ error: '需要管理员权限' });
+  }
+  stmts.deleteMusicSuggestion.run(req.params.id);
+  res.json({ ok: true });
+});
+
+// 邮件 - 发送
+app.post('/api/mails/send', authMiddleware, (req, res) => {
+  const { recipientUsername, subject, content } = req.body || {};
+  if (!recipientUsername || !subject || !content) {
+    return res.status(400).json({ error: '收件人、主题和内容不能为空' });
+  }
+  const recipient = stmts.getUserByUsername.get(recipientUsername);
+  if (!recipient) {
+    return res.status(404).json({ error: '收件人不存在' });
+  }
+  if (recipient.banned) {
+    return res.status(400).json({ error: '收件人账号已被封禁' });
+  }
+  const id = uuidv4();
+  const createdAt = nowISO();
+  stmts.insertMail.run(id, req.user.id, recipient.id, subject.trim(), content.trim(), createdAt);
+  // 实时通知收件人
+  io.to(`user:${recipient.id}`).emit('new_mail', {
+    id, from: publicUser(req.user), subject: subject.trim(), createdAt,
+  });
+  res.json({ ok: true, id });
+});
+
+// 邮件 - 获取列表
+app.get('/api/mails', authMiddleware, (req, res) => {
+  const mails = stmts.getUserMails.all(req.user.id, req.user.id).map(m => {
+    const sender = stmts.getUserById.get(m.sender_id);
+    const recipient = stmts.getUserById.get(m.recipient_id);
+    return {
+      id: m.id,
+      sender: sender ? publicUser(sender) : null,
+      recipient: recipient ? publicUser(recipient) : null,
+      subject: m.subject,
+      content: m.content,
+      isRead: !!m.is_read,
+      createdAt: m.created_at,
+    };
+  });
+  const unreadCount = stmts.getUnreadMailCount.get(req.user.id).cnt;
+  res.json({ mails, unreadCount });
+});
+
+// 邮件 - 标记已读
+app.post('/api/mails/:id/read', authMiddleware, (req, res) => {
+  const mail = stmts.getMailById.get(req.params.id);
+  if (!mail) {
+    return res.status(404).json({ error: '邮件不存在' });
+  }
+  if (mail.recipient_id !== req.user.id) {
+    return res.status(403).json({ error: '无权操作' });
+  }
+  stmts.markMailRead.run(mail.id);
+  res.json({ ok: true });
+});
+
+// 头像上传
+app.post('/api/users/avatar', authMiddleware, avatarUpload.single('avatar'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: '未收到文件或格式不支持' });
+  }
+  const avatarUrl = `/avatars/${req.file.filename}`;
+  stmts.updateUserAvatar.run(avatarUrl, req.user.id);
+  const user = stmts.getUserById.get(req.user.id);
+  res.json({ ok: true, user: publicUser(user) });
+});
+
+// 静态访问头像文件
+app.use('/avatars', express.static(AVATAR_DIR));
 
 // 前端路由回退
 app.get('/', (req, res) => {
@@ -1006,6 +1334,10 @@ io.use((socket, next) => {
       return next(new Error('用户不存在'));
     }
     socket.user = user;
+    // V0.6 新增：拒绝封禁用户连接
+    if (user.banned) {
+      return next(new Error('账号已被封禁'));
+    }
     next();
   } catch (err) {
     next(new Error('认证令牌无效'));
@@ -1142,6 +1474,11 @@ io.on('connection', (socket) => {
 
   // ---- 加入私有用户 room（用于接收定向推送） ----
   socket.join(`user:${userId}`);
+
+  // V0.6 新增：监听被封禁事件 - 立即断开连接
+  socket.on('disconnect_banned', () => {
+    socket.disconnect(true);
+  });
 
   // ---- 断开连接 ----
   socket.on('disconnect', () => {
