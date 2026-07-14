@@ -25,6 +25,7 @@
         <button class="sidebar-tab active" data-stab="chats">聊天</button>
         <button class="sidebar-tab" data-stab="friends">好友</button>
         <button class="sidebar-tab" data-stab="music">音乐</button>
+        <button class="sidebar-tab admin-only-tab" data-stab="admin" style="display:none;">用户管理</button>
         <span class="sidebar-tab-badge" id="friend-request-badge" style="display:none;">0</span>
       </div>
 
@@ -58,6 +59,31 @@
           </div>
           <div class="music-list" id="music-list">
             <p class="empty-hint">暂无音乐</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- V0.5 新增：管理员用户管理面板 -->
+      <div class="admin-panel" id="admin-panel" style="display:none;">
+        <div class="admin-stats">
+          <div class="admin-stat-card">
+            <div class="admin-stat-num" id="admin-total-count">0</div>
+            <div class="admin-stat-label">总注册用户</div>
+          </div>
+          <div class="admin-stat-card">
+            <div class="admin-stat-num" id="admin-online-count">0</div>
+            <div class="admin-stat-label">当前在线</div>
+          </div>
+        </div>
+        <div class="admin-section">
+          <div class="admin-section-title">
+            <span>注册用户列表</span>
+            <button class="admin-refresh-btn" id="admin-refresh-btn" title="刷新">
+              <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+            </button>
+          </div>
+          <div class="admin-user-list" id="admin-user-list">
+            <p class="empty-hint">加载中...</p>
           </div>
         </div>
       </div>
