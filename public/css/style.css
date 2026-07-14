@@ -1800,6 +1800,7 @@ input, textarea {
   border-bottom: 1px solid var(--border);
   background: var(--bg);
   padding: 0 8px;
+  flex-shrink: 0;
 }
 
 .sidebar-tab {
