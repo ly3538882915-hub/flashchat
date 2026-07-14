@@ -110,7 +110,10 @@
             <span>写邮件</span>
           </div>
           <div class="mail-compose-form">
-            <input type="text" id="mail-recipient" placeholder="收件人用户名" />
+            <div class="mail-recipient-wrapper">
+              <input type="text" id="mail-recipient" placeholder="收件人昵称（输入@选择在线用户）" />
+              <div class="mail-recipient-suggestions" id="mail-recipient-suggestions" style="display:none;"></div>
+            </div>
             <input type="text" id="mail-subject" placeholder="邮件主题" />
             <textarea id="mail-content" placeholder="邮件内容" rows="4"></textarea>
             <button class="btn-primary btn-sm" id="send-mail-btn">发送邮件</button>
@@ -149,9 +152,24 @@
 
     <!-- 右侧聊天区域 -->
     <main class="chat-main" id="chat-main">
-      <!-- V0.6 新增：右上角实时时钟 -->
-      <div class="clock-widget" id="clock-widget">
-        <span id="clock-display">--</span>
+      <!-- V0.65 新增：右上角工具栏（时钟+功能栏） -->
+      <div class="top-toolbar" id="top-toolbar">
+        <div class="clock-widget" id="clock-widget">
+          <span id="clock-display">--</span>
+        </div>
+        <div class="toolbar-dropdown" id="toolbar-dropdown">
+          <button class="toolbar-btn" id="toolbar-btn" title="功能栏">
+            <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+          </button>
+          <div class="toolbar-menu" id="toolbar-menu" style="display:none;">
+            <div class="toolbar-menu-section">
+              <div class="toolbar-menu-title">字体切换</div>
+              <button class="toolbar-menu-item font-option active" data-font="default">默认字体</button>
+              <button class="toolbar-menu-item font-option" data-font="songti">宋体</button>
+              <button class="toolbar-menu-item font-option" data-font="cartoon">卡通字体</button>
+            </div>
+          </div>
+        </div>
       </div>
       <!-- 空状态（Telegram 风格气泡图标 + 浮动动画） -->
       <div class="chat-empty" id="chat-empty">
@@ -393,6 +411,19 @@
     </div>
   </div>
   <audio id="audio-player" preload="metadata"></audio>
+
+  <!-- V0.65 新增：封禁提示覆盖层 -->
+  <div class="banned-overlay" id="banned-overlay" style="display:none;">
+    <div class="banned-card">
+      <div class="banned-icon">
+        <svg viewBox="0 0 24 24" width="64" height="64"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8 0-1.85.63-3.55 1.69-4.9L16.9 18.31C15.55 19.37 13.85 20 12 20zm6.31-3.1L7.1 5.69C8.45 4.63 10.15 4 12 4c4.41 0 8 3.59 8 8 0 1.85-.63 3.55-1.69 4.9z"/></svg>
+      </div>
+      <h2 class="banned-title">账号已被封禁</h2>
+      <p class="banned-reason-label">封禁原因：</p>
+      <p class="banned-reason-text" id="banned-reason-text"></p>
+      <p class="banned-hint">如有疑问请联系管理员解封</p>
+    </div>
+  </div>
 
   <!-- Toast 通知容器 -->
   <div class="toast-container" id="toast-container"></div>
