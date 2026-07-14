@@ -2512,22 +2512,7 @@
       if (file) uploadAvatar(file);
     });
 
-    // V0.65 新增：功能栏按钮点击切换
-    var toolbarBtn = document.getElementById('toolbar-btn');
-    var toolbarMenu = document.getElementById('toolbar-menu');
-    if (toolbarBtn && toolbarMenu) {
-      toolbarBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        toolbarMenu.style.display = toolbarMenu.style.display === 'none' ? 'block' : 'none';
-      });
-      document.addEventListener('click', function(e) {
-        if (!e.target.closest('#toolbar-dropdown')) {
-          toolbarMenu.style.display = 'none';
-        }
-      });
-    }
-
-    // V0.65 新增：字体切换
+    // V0.65.2 新增：字体切换
     var fontOptions = document.querySelectorAll('.font-option');
     fontOptions.forEach(function(opt) {
       opt.addEventListener('click', function() {
@@ -2539,7 +2524,6 @@
           document.body.classList.add('font-' + fontType);
         }
         localStorage.setItem('fc_font', fontType);
-        if (toolbarMenu) toolbarMenu.style.display = 'none';
         showToast('字体已切换', 'success');
       });
     });
