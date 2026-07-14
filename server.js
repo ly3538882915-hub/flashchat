@@ -136,6 +136,10 @@ const stmts = {
   searchUsers: db.prepare(
     'SELECT id, username, nickname, avatar_color, created_at FROM users WHERE username LIKE ? OR nickname LIKE ? LIMIT 20'
   ),
+  getAllUsers: db.prepare(
+    'SELECT id, username, nickname, avatar_color, created_at FROM users ORDER BY created_at DESC'
+  ),
+  getUserCount: db.prepare('SELECT COUNT(*) as count FROM users'),
   updateUserProfile: db.prepare('UPDATE users SET nickname = ? WHERE id = ?'),
 
   insertConversation: db.prepare(
@@ -949,6 +953,35 @@ app.delete('/api/music/:id', authMiddleware, (req, res) => {
   }
   stmts.deleteMusicRow.run(music.id);
   res.json({ ok: true });
+});
+
+// ============================================================
+// V0.5 新增：管理员用户管理 API
+// ============================================================
+
+// 获取所有注册用户列表（仅管理员）
+app.get('/api/admin/users', authMiddleware, (req, res) => {
+  if (!isAdmin(req.user)) {
+    return res.status(403).json({ error: '需要管理员权限' });
+  }
+  const users = stmts.getAllUsers.all();
+  const totalCount = stmts.getUserCount.get().count;
+  // 获取在线用户 ID 集合
+  const onlineUserIds = new Set();
+  for (const [sid, socket] of io.sockets.sockets) {
+    if (socket.handshake && socket.handshake.userId) {
+      onlineUserIds.add(socket.handshake.userId);
+    }
+  }
+  const userList = users.map(u => ({
+    id: u.id,
+    username: u.username,
+    nickname: u.nickname,
+    avatarColor: u.avatar_color,
+    createdAt: u.created_at,
+    isOnline: onlineUserIds.has(u.id),
+  }));
+  res.json({ users: userList, total: totalCount, online: onlineUserIds.size });
 });
 
 // 前端路由回退
