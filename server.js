@@ -1,7 +1,8 @@
 /**
- * FlashChat Web - 服务器入口 V0.3
+ * FlashChat Web - 服务器入口 V0.7
  * Express + Socket.IO + SQLite (better-sqlite3) + JWT 认证
  * V0.3 新增：完整好友系统（好友请求/接受/拒绝/删除、私聊需好友验证）
+ * V0.7 新增：超管任命、管理员上线通知、图片/表情/动图发送、会员系统、会话置顶/删除、左滑操作
  *
  * 启动: node server.js
  * 访问: http://localhost:3000  /  http://<本机IP>:3000
@@ -23,7 +24,7 @@ const multer = require('multer');
 // ============================================================
 // 配置常量
 // ============================================================
-const APP_VERSION = 'v0.66';
+const APP_VERSION = 'v0.7';
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0'; // 监听所有网络接口，允许局域网访问
 const JWT_SECRET = process.env.JWT_SECRET || 'flashchat-secret-key-v0.2-please-change-in-production';
@@ -41,6 +42,12 @@ if (!fs.existsSync(AVATAR_DIR)) {
   fs.mkdirSync(AVATAR_DIR, { recursive: true });
 }
 
+// V0.7 新增：聊天图片上传目录
+const IMAGE_DIR = path.join(DB_DIR, 'images');
+if (!fs.existsSync(IMAGE_DIR)) {
+  fs.mkdirSync(IMAGE_DIR, { recursive: true });
+}
+
 // V0.6 新增：违禁词列表（用户名和昵称中不可包含）
 const BANNED_WORDS = [
   'sb', 'SB', '傻逼', '傻子', '操你', '草泥马', '日你', 'fuck', 'shit',
@@ -51,7 +58,7 @@ const BANNED_WORDS = [
 
 // V0.65 新增：软件公告内容
 const ANNOUNCEMENT = {
-  version: 'v0.66',
+  version: 'v0.7',
   title: 'Telegram FlashChat 公告',
   content: [
     '软件开发运营商 - Telegram FlashChat工作室',
@@ -193,6 +200,17 @@ try { db.exec('ALTER TABLE users ADD COLUMN banned_reason TEXT'); } catch(e) {}
 // V0.66 新增：为 conversations 表添加 description（群公告）字段
 try { db.exec('ALTER TABLE conversations ADD COLUMN description TEXT'); } catch(e) {}
 
+// V0.7 新增：为 users 表添加 role（超管）、membership（会员等级）、membership_color（会员颜色）字段
+try { db.exec("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'"); } catch(e) {}
+try { db.exec("ALTER TABLE users ADD COLUMN membership TEXT DEFAULT 'free'"); } catch(e) {}
+try { db.exec('ALTER TABLE users ADD COLUMN membership_color TEXT'); } catch(e) {}
+
+// V0.7 新增：为 conversations 表添加 is_pinned（置顶）字段
+try { db.exec('ALTER TABLE conversations ADD COLUMN is_pinned INTEGER DEFAULT 0'); } catch(e) {}
+
+// V0.7 新增：为 messages 表添加 type 字段（text/image/sticker）
+try { db.exec("ALTER TABLE messages ADD COLUMN type TEXT DEFAULT 'text'"); } catch(e) {}
+
 // 预编译语句（参数化查询，防 SQL 注入）
 const stmts = {
   insertUser: db.prepare(
@@ -202,10 +220,10 @@ const stmts = {
   getUserByNickname: db.prepare('SELECT * FROM users WHERE nickname = ?'),
   getUserById: db.prepare('SELECT * FROM users WHERE id = ?'),
   searchUsers: db.prepare(
-    'SELECT id, username, nickname, avatar_color, avatar_url, created_at FROM users WHERE username LIKE ? OR nickname LIKE ? LIMIT 20'
+    'SELECT id, username, nickname, avatar_color, avatar_url, role, membership, membership_color, created_at FROM users WHERE username LIKE ? OR nickname LIKE ? LIMIT 20'
   ),
   getAllUsers: db.prepare(
-    'SELECT id, username, nickname, avatar_color, avatar_url, banned, banned_reason, created_at FROM users ORDER BY created_at DESC'
+    'SELECT id, username, nickname, avatar_color, avatar_url, banned, banned_reason, role, membership, membership_color, created_at FROM users ORDER BY created_at DESC'
   ),
   getUserCount: db.prepare('SELECT COUNT(*) as count FROM users'),
   updateUserProfile: db.prepare('UPDATE users SET nickname = ? WHERE id = ?'),
@@ -223,7 +241,7 @@ const stmts = {
   getConversationsByUser: db.prepare(
     `SELECT c.* FROM conversations c
      INNER JOIN conversation_members cm ON c.id = cm.conversation_id
-     WHERE cm.user_id = ? ORDER BY c.created_at DESC`
+     WHERE cm.user_id = ? ORDER BY c.is_pinned DESC, c.created_at DESC`
   ),
   getPrivateConversation: db.prepare(
     `SELECT c.* FROM conversations c
@@ -330,6 +348,25 @@ const stmts = {
   deleteConversation: db.prepare('DELETE FROM conversations WHERE id = ?'),
   deleteConversationMembers: db.prepare('DELETE FROM conversation_members WHERE conversation_id = ?'),
   deleteConversationMessages: db.prepare('DELETE FROM messages WHERE conversation_id = ?'),
+
+  // V0.7 新增：超管任命
+  promoteUser: db.prepare("UPDATE users SET role = 'superadmin', membership = 'platinum' WHERE id = ?"),
+  demoteUser: db.prepare("UPDATE users SET role = 'user', membership = 'free', membership_color = NULL WHERE id = ?"),
+
+  // V0.7 新增：图片消息
+  insertImageMessage: db.prepare(
+    "INSERT INTO messages (id, conversation_id, sender_id, content, type, created_at) VALUES (?, ?, ?, ?, 'image', ?)"
+  ),
+
+  // V0.7 新增：会话置顶/取消置顶/标为未读
+  pinConversation: db.prepare('UPDATE conversations SET is_pinned = 1 WHERE id = ?'),
+  unpinConversation: db.prepare('UPDATE conversations SET is_pinned = 0 WHERE id = ?'),
+
+  // V0.7 新增：会员颜色设置
+  setMembershipColor: db.prepare('UPDATE users SET membership_color = ? WHERE id = ?'),
+
+  // V0.7 新增：删除会话（仅删除当前用户的成员关系，私聊则删除双方记录）
+  deleteConversationForUser: db.prepare('DELETE FROM conversation_members WHERE conversation_id = ? AND user_id = ?'),
 };
 
 // ============================================================
@@ -431,6 +468,26 @@ const avatarUpload = multer({
   },
 });
 
+// V0.7 新增：聊天图片上传 multer 配置（限制10MB）
+const imageUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, IMAGE_DIR),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname) || '.jpg';
+      cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedMime = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp'];
+    if (allowedMime.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('仅支持 JPG, PNG, GIF, WebP, BMP 格式的图片'));
+    }
+  },
+});
+
 // ----- 工具函数 -----
 function pickAvatarColor() {
   return AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
@@ -451,11 +508,31 @@ function publicUser(user) {
     createdAt: user.created_at,
     banned: !!(user.banned),
     bannedReason: user.banned_reason || null,
+    // V0.7 新增：角色和会员信息
+    role: user.role || 'user',
+    membership: user.membership || 'free',
+    membershipColor: user.membership_color || null,
   };
 }
 
 function isAdmin(user) {
   return !!ADMIN_USERNAME && user.username === ADMIN_USERNAME;
+}
+
+// V0.7 新增：判断是否为超管
+function isSuperAdmin(user) {
+  return user.role === 'superadmin';
+}
+
+// V0.7 新增：判断是否拥有管理员权限（管理员或超管）
+function hasAdminPrivilege(user) {
+  return isAdmin(user) || isSuperAdmin(user);
+}
+
+// V0.7 新增：管理员自动拥有 crown 会员等级
+function getEffectiveMembership(user) {
+  if (isAdmin(user)) return 'crown';
+  return user.membership || 'free';
 }
 
 function signToken(userId) {
@@ -531,6 +608,9 @@ function buildConversationDetail(conversation, currentUserId) {
   let displayName = conversation.name;
   let displayColor = conversation.avatar_color;
   let otherAvatarUrl = null;
+  let otherMembership = 'free';
+  let otherMembershipColor = null;
+  let otherRole = 'user';
   if (conversation.type === 'private') {
     const otherId = members.find((m) => m !== currentUserId) || currentUserId;
     const other = stmts.getUserById.get(otherId);
@@ -538,6 +618,10 @@ function buildConversationDetail(conversation, currentUserId) {
       displayName = other.nickname;
       displayColor = other.avatar_color;
       otherAvatarUrl = other.avatar_url || null;
+      // V0.7 新增：返回对方的会员信息
+      otherMembership = getEffectiveMembership(other);
+      otherMembershipColor = other.membership_color || null;
+      otherRole = other.role || 'user';
     }
   }
 
@@ -547,12 +631,16 @@ function buildConversationDetail(conversation, currentUserId) {
     name: displayName,
     avatarColor: displayColor,
     otherAvatarUrl: otherAvatarUrl,
+    otherMembership: otherMembership,
+    otherMembershipColor: otherMembershipColor,
+    otherRole: otherRole,
     description: conversation.description || null,
     createdBy: conversation.created_by,
     createdAt: conversation.created_at,
     members,
     lastMessage,
     unreadCount,
+    isPinned: !!(conversation.is_pinned),
   };
 }
 
@@ -664,12 +752,30 @@ app.post('/api/login', (req, res) => {
   }
 
   const token = signToken(user.id);
+
+  // V0.7 新增：管理员登录成功后广播 admin_online 事件
+  if (isAdmin(user)) {
+    // 延迟广播，确保客户端已建立 Socket.IO 连接
+    setTimeout(() => {
+      io.emit('admin_online', {
+        adminId: user.id,
+        adminNickname: user.nickname,
+      });
+    }, 500);
+  }
+
   res.json({ token, user: publicUser(user) });
 });
 
 // 获取当前用户
 app.get('/api/me', authMiddleware, (req, res) => {
-  res.json({ user: { ...publicUser(req.user), isAdmin: isAdmin(req.user) } });
+  res.json({
+    user: {
+      ...publicUser(req.user),
+      isAdmin: isAdmin(req.user),
+      membership: getEffectiveMembership(req.user),
+    }
+  });
 });
 
 // 搜索用户
@@ -688,6 +794,9 @@ app.get('/api/users/search', authMiddleware, (req, res) => {
       avatarColor: u.avatar_color,
       avatarUrl: u.avatar_url || null,
       online: isUserOnline(u.id),
+      role: u.role || 'user',
+      membership: getEffectiveMembership(u),
+      membershipColor: u.membership_color || null,
     }));
   res.json({ users });
 });
@@ -696,8 +805,11 @@ app.get('/api/users/search', authMiddleware, (req, res) => {
 app.get('/api/conversations', authMiddleware, (req, res) => {
   const convs = stmts.getConversationsByUser.all(req.user.id);
   const details = convs.map((c) => buildConversationDetail(c, req.user.id));
-  // 按最后消息时间排序，无消息的排后面
+  // 按置顶状态和最后消息时间排序，置顶在前
   details.sort((a, b) => {
+    // 置顶会话排最前
+    if (a.isPinned && !b.isPinned) return -1;
+    if (!a.isPinned && b.isPinned) return 1;
     const ta = a.lastMessage ? a.lastMessage.createdAt : a.createdAt;
     const tb = b.lastMessage ? b.lastMessage.createdAt : b.createdAt;
     return tb.localeCompare(ta);
@@ -810,6 +922,7 @@ app.get('/api/conversations/:id/messages', authMiddleware, (req, res) => {
       senderId: m.sender_id,
       sender: publicUser(sender),
       content: m.content,
+      type: m.type || 'text',
       createdAt: m.created_at,
     };
   });
@@ -858,6 +971,7 @@ app.get('/api/conversations/:id/members', authMiddleware, (req, res) => {
     return {
       ...publicUser(u),
       online: isUserOnline(mid),
+      membership: getEffectiveMembership(u),
     };
   });
   res.json({ members: details });
@@ -983,6 +1097,10 @@ app.get('/api/friends', authMiddleware, (req, res) => {
       avatarUrl: u.avatar_url || null,
       online: isUserOnline(u.id),
       since: row.accepted_at,
+      // V0.7 新增：会员信息
+      membership: getEffectiveMembership(u),
+      membershipColor: u.membership_color || null,
+      role: u.role || 'user',
     };
   });
   res.json({ friends });
@@ -1153,6 +1271,10 @@ app.get('/api/admin/users', authMiddleware, (req, res) => {
       banned: !!(u.banned),
       bannedReason: u.banned_reason || null,
       warningCount: warnCount,
+      // V0.7 新增：角色和会员信息
+      role: u.role || 'user',
+      membership: getEffectiveMembership(u),
+      membershipColor: u.membership_color || null,
     };
   });
   res.json({ users: userList, total: totalCount, online: onlineUserIds.size });
@@ -1370,6 +1492,243 @@ app.post('/api/users/avatar', authMiddleware, avatarUpload.single('avatar'), (re
 // 静态访问头像文件
 app.use('/avatars', express.static(AVATAR_DIR));
 
+// V0.7 新增：静态访问聊天图片文件
+app.use('/images', express.static(IMAGE_DIR));
+
+// ============================================================
+// V0.7 新增：超管任命 API
+// ============================================================
+
+// 提升用户为超管（仅管理员可操作）
+app.post('/api/users/:id/promote', authMiddleware, (req, res) => {
+  if (!isAdmin(req.user)) {
+    return res.status(403).json({ error: '需要管理员权限' });
+  }
+  const targetUser = stmts.getUserById.get(req.params.id);
+  if (!targetUser) {
+    return res.status(404).json({ error: '用户不存在' });
+  }
+  if (isAdmin(targetUser)) {
+    return res.status(400).json({ error: '该用户已是管理员' });
+  }
+  if (targetUser.role === 'superadmin') {
+    return res.status(400).json({ error: '该用户已是超管' });
+  }
+  // 提升为超管，同时获得 platinum 会员
+  stmts.promoteUser.run(targetUser.id);
+
+  // 通知被提升的用户
+  io.to(`user:${targetUser.id}`).emit('admin_promoted', {
+    userId: targetUser.id,
+    promotedBy: publicUser(req.user),
+    message: '您已被管理员任命为超管',
+  });
+
+  res.json({ ok: true, message: '用户已提升为超管' });
+});
+
+// 撤销超管身份（仅管理员可操作）
+app.post('/api/users/:id/demote', authMiddleware, (req, res) => {
+  if (!isAdmin(req.user)) {
+    return res.status(403).json({ error: '需要管理员权限' });
+  }
+  const targetUser = stmts.getUserById.get(req.params.id);
+  if (!targetUser) {
+    return res.status(404).json({ error: '用户不存在' });
+  }
+  if (isAdmin(targetUser)) {
+    return res.status(400).json({ error: '不能撤销管理员身份' });
+  }
+  if (targetUser.role !== 'superadmin') {
+    return res.status(400).json({ error: '该用户不是超管' });
+  }
+  // 降级为普通用户，恢复 free 会员
+  stmts.demoteUser.run(targetUser.id);
+
+  // 通知被降级的用户
+  io.to(`user:${targetUser.id}`).emit('admin_demoted', {
+    userId: targetUser.id,
+    demotedBy: publicUser(req.user),
+    message: '您的超管身份已被撤销',
+  });
+
+  res.json({ ok: true, message: '超管身份已撤销' });
+});
+
+// ============================================================
+// V0.7 新增：图片消息 API
+// ============================================================
+
+// 上传聊天图片
+app.post('/api/upload/image', authMiddleware, imageUpload.single('image'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: '未收到图片或格式不支持' });
+  }
+  const imageUrl = `/images/${req.file.filename}`;
+  res.json({ ok: true, url: imageUrl, filename: req.file.filename });
+});
+
+// 发送图片消息
+app.post('/api/conversations/:id/image', authMiddleware, (req, res) => {
+  const convId = req.params.id;
+  const conv = stmts.getConversationById.get(convId);
+  if (!conv) {
+    return res.status(404).json({ error: '会话不存在' });
+  }
+  // 校验成员资格
+  const members = stmts.getMembersByConversation.all(convId).map((r) => r.user_id);
+  if (!members.includes(req.user.id)) {
+    return res.status(403).json({ error: '无权发送消息到该会话' });
+  }
+
+  const { imageUrl } = req.body || {};
+  if (!imageUrl || !imageUrl.trim()) {
+    return res.status(400).json({ error: '图片地址不能为空' });
+  }
+
+  const id = uuidv4();
+  const createdAt = nowISO();
+  stmts.insertImageMessage.run(id, convId, req.user.id, imageUrl.trim(), createdAt);
+
+  const message = {
+    id,
+    conversationId: convId,
+    senderId: req.user.id,
+    sender: publicUser(req.user),
+    content: imageUrl.trim(),
+    type: 'image',
+    createdAt,
+  };
+
+  // 通过 Socket.IO 推送给会话内所有用户
+  io.to(convId).emit('new_message', message);
+
+  // 对不在线该会话的用户累计未读
+  for (const memberId of members) {
+    if (memberId === req.user.id) continue;
+    const active = userActiveConversation.get(memberId);
+    if (active !== convId) {
+      unreadMap.incIncoming(convId, memberId);
+      if (isUserOnline(memberId)) {
+        io.to(`user:${memberId}`).emit('conversation_updated', {
+          conversationId: convId,
+          lastMessage: { content: '[图片]', senderId: req.user.id, createdAt },
+          unreadCount: unreadMap.getIncoming(convId, memberId),
+        });
+      }
+    } else {
+      io.to(`user:${req.user.id}`).emit('message_read', {
+        conversationId: convId,
+        messageIds: [id],
+      });
+    }
+  }
+
+  res.json({ ok: true, message });
+});
+
+// ============================================================
+// V0.7 新增：会话置顶/取消置顶/删除 API
+// ============================================================
+
+// 置顶会话
+app.post('/api/conversations/:id/pin', authMiddleware, (req, res) => {
+  const convId = req.params.id;
+  const conv = stmts.getConversationById.get(convId);
+  if (!conv) {
+    return res.status(404).json({ error: '会话不存在' });
+  }
+  const members = stmts.getMembersByConversation.all(convId).map((r) => r.user_id);
+  if (!members.includes(req.user.id)) {
+    return res.status(403).json({ error: '无权操作' });
+  }
+  stmts.pinConversation.run(convId);
+  res.json({ ok: true, message: '会话已置顶' });
+});
+
+// 取消置顶会话
+app.post('/api/conversations/:id/unpin', authMiddleware, (req, res) => {
+  const convId = req.params.id;
+  const conv = stmts.getConversationById.get(convId);
+  if (!conv) {
+    return res.status(404).json({ error: '会话不存在' });
+  }
+  const members = stmts.getMembersByConversation.all(convId).map((r) => r.user_id);
+  if (!members.includes(req.user.id)) {
+    return res.status(403).json({ error: '无权操作' });
+  }
+  stmts.unpinConversation.run(convId);
+  res.json({ ok: true, message: '已取消置顶' });
+});
+
+// 删除会话（仅删除当前用户的会话记录，不删除好友关系）
+app.delete('/api/conversations/:id', authMiddleware, (req, res) => {
+  const convId = req.params.id;
+  const conv = stmts.getConversationById.get(convId);
+  if (!conv) {
+    return res.status(404).json({ error: '会话不存在' });
+  }
+  const members = stmts.getMembersByConversation.all(convId).map((r) => r.user_id);
+  if (!members.includes(req.user.id)) {
+    return res.status(403).json({ error: '无权操作' });
+  }
+
+  // 从当前用户的会话成员列表中移除
+  stmts.deleteConversationForUser.run(convId, req.user.id);
+
+  // 如果是群聊且没有成员了，清理整个会话
+  const remainingCount = stmts.getMemberCount.get(convId).cnt;
+  if (remainingCount === 0) {
+    try { stmts.deleteConversationMessages.run(convId); } catch(e) {}
+    try { stmts.deleteConversationMembers.run(convId); } catch(e) {}
+    try { stmts.deleteConversation.run(convId); } catch(e) {}
+  }
+
+  res.json({ ok: true, message: '会话已删除' });
+});
+
+// ============================================================
+// V0.7 新增：会员颜色设置 API
+// ============================================================
+
+// 超管设置自己的会员颜色
+app.post('/api/users/membership-color', authMiddleware, (req, res) => {
+  // 仅 platinum 会员可设置
+  const membership = getEffectiveMembership(req.user);
+  if (membership !== 'platinum') {
+    return res.status(403).json({ error: '仅铂金会员可设置专属颜色' });
+  }
+
+  const { color } = req.body || {};
+  if (!color || !color.trim()) {
+    return res.status(400).json({ error: '颜色值不能为空' });
+  }
+
+  const colorVal = color.trim();
+
+  // 验证颜色值：必须是有效的 hex 颜色（#RRGGBB 或 #RGB）
+  const hexPattern = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
+  if (!hexPattern.test(colorVal)) {
+    return res.status(400).json({ error: '颜色值必须是有效的 hex 格式（如 #FF0000）' });
+  }
+
+  // 拒绝金色（管理员专属）
+  const lowerColor = colorVal.toLowerCase();
+  const goldColors = ['#ffd700', '#ffD700', '#FFD700', '#daa520'];
+  if (goldColors.includes(lowerColor)) {
+    return res.status(400).json({ error: '不能使用金色，这是管理员专属颜色' });
+  }
+
+  // 拒绝包含渐变的值
+  if (colorVal.includes('gradient') || colorVal.includes('linear') || colorVal.includes('rgb(')) {
+    return res.status(400).json({ error: '不支持渐变色，请使用单一颜色' });
+  }
+
+  stmts.setMembershipColor.run(colorVal, req.user.id);
+  const updatedUser = stmts.getUserById.get(req.user.id);
+  res.json({ ok: true, user: publicUser(updatedUser) });
+});
+
 // ============================================================
 // V0.66 新增：群聊管理 API（修改群信息、邀请加群、退出群聊）
 // ============================================================
@@ -1575,7 +1934,7 @@ io.on('connection', (socket) => {
   // ---- 事件: send_message ----
   socket.on('send_message', (payload, ack) => {
     try {
-      const { conversationId, content } = payload || {};
+      const { conversationId, content, type } = payload || {};
       if (!conversationId || !content || !content.trim()) {
         if (typeof ack === 'function') ack({ error: '参数无效' });
         return;
@@ -1591,7 +1950,15 @@ io.on('connection', (socket) => {
 
       const id = uuidv4();
       const createdAt = nowISO();
-      stmts.insertMessage.run(id, conversationId, userId, content.trim(), createdAt);
+      const msgType = type === 'sticker' ? 'sticker' : 'text';
+      // V0.7 新增：支持 sticker 类型消息，content 存储动图标识
+      if (msgType === 'sticker') {
+        db.prepare(
+          "INSERT INTO messages (id, conversation_id, sender_id, content, type, created_at) VALUES (?, ?, ?, ?, 'sticker', ?)"
+        ).run(id, conversationId, userId, content.trim(), createdAt);
+      } else {
+        stmts.insertMessage.run(id, conversationId, userId, content.trim(), createdAt);
+      }
 
       const message = {
         id,
@@ -1599,6 +1966,7 @@ io.on('connection', (socket) => {
         senderId: userId,
         sender: publicUser(user),
         content: content.trim(),
+        type: msgType,
         createdAt,
       };
 
