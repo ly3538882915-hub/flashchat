@@ -198,7 +198,7 @@ input, textarea {
   width: 72px;
   height: 72px;
   margin: 0 auto 16px;
-  background: var(--primary);
+  background: linear-gradient(135deg, #2AABEE 0%, #1d8fc4 100%);
   color: #fff;
   border-radius: 50%;
   display: flex;
@@ -208,6 +208,17 @@ input, textarea {
   font-weight: 700;
   box-shadow: 0 8px 24px rgba(var(--primary-rgb), 0.4);
   animation: logoBreathe 2.5s ease-in-out infinite;
+}
+
+/* V0.66 新增：Telegram 纸飞机 Logo — SVG 居中显示 */
+.logo-circle.telegram-logo {
+  overflow: hidden;
+}
+
+.logo-circle.telegram-logo svg {
+  display: block;
+  width: 48px;
+  height: 48px;
 }
 
 .logo-letter {
@@ -2939,6 +2950,190 @@ body.font-cartoon .mail-view-content {
   overflow-y: auto;
   z-index: 50;
 }
+
+/* ============================================================
+   V0.66 新增样式：群聊信息弹窗、群成员列表等
+   ============================================================ */
+
+/* 群成员列表容器 */
+.group-member-list {
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  background: var(--bg-secondary);
+}
+
+/* 单个群成员项 */
+.group-member-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  transition: background var(--transition);
+}
+
+.group-member-item:hover {
+  background: var(--bg-hover);
+}
+
+.group-member-item .avatar {
+  width: 36px;
+  height: 36px;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.group-member-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.group-member-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-member-status {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.group-member-status.online {
+  color: var(--green);
+}
+
+/* 群主标记徽章 */
+.group-owner-badge {
+  display: inline-block;
+  background: var(--primary);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
+/* 群公告文本域 */
+#group-info-notice {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+  resize: vertical;
+  font-family: inherit;
+  transition: border-color var(--transition);
+  box-sizing: border-box;
+}
+
+#group-info-notice:focus {
+  border-color: var(--primary);
+}
+
+#group-info-name {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+  transition: border-color var(--transition);
+  box-sizing: border-box;
+}
+
+#group-info-name:focus {
+  border-color: var(--primary);
+}
+
+#group-info-name:disabled,
+#group-info-notice:disabled {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: not-allowed;
+}
+
+/* 邀请弹窗中选中的好友项 */
+.invite-friend-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.invite-friend-item:hover {
+  background: var(--bg-hover);
+}
+
+.invite-friend-item.selected {
+  background: rgba(var(--primary-rgb), 0.1);
+}
+
+.invite-friend-item .avatar {
+  width: 36px;
+  height: 36px;
+  font-size: 14px;
+}
+
+.invite-friend-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.invite-friend-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.invite-friend-check {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all var(--transition);
+}
+
+.invite-friend-item.selected .invite-friend-check {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.invite-friend-item.selected .invite-friend-check::after {
+  content: '\2713';
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* 邮件建议项 */
 .recipient-suggestion-item {
   padding: 8px 12px;
   cursor: pointer;
