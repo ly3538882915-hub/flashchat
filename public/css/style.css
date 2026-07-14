@@ -2449,6 +2449,9 @@ body:has(.music-player[style*="flex"]) .messages-area {
 
 /* 实时时钟 */
 .clock-widget {
+  position: absolute;
+  top: 12px;
+  right: 12px;
   background: rgba(42, 171, 238, 0.1);
   border: 1px solid rgba(42, 171, 238, 0.3);
   border-radius: 8px;
@@ -2459,10 +2462,59 @@ body:has(.music-player[style*="flex"]) .messages-area {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   pointer-events: none;
-  position: static;
-  margin-bottom: 8px;
   font-family: 'Courier New', monospace;
   letter-spacing: 1px;
+  z-index: 100;
+}
+
+/* V0.65.2 字体切换面板（空状态页面） */
+.font-switch-panel {
+  margin-top: 32px;
+  padding: 20px 24px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(42, 171, 238, 0.2);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+}
+.font-switch-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+.font-switch-options {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.font-switch-btn {
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+.font-switch-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(42, 171, 238, 0.08);
+}
+.font-switch-btn.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+  font-weight: 600;
 }
 
 /* 邮件面板 */
@@ -2770,74 +2822,53 @@ body:has(.music-player[style*="flex"]) .messages-area {
   to { opacity: 1; }
 }
 
-/* --- 右上角工具栏 --- */
-.top-toolbar {
-  position: absolute;
-  top: 12px;
-  right: 12px;
+/* V0.65.2 字体切换面板（空状态页面） */
+.font-switch-panel {
+  margin-top: 32px;
+  padding: 20px 24px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(42, 171, 238, 0.2);
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 0;
-  z-index: 100;
-}
-.toolbar-dropdown {
-  position: relative;
-}
-.toolbar-btn {
-  background: rgba(42, 171, 238, 0.1);
-  border: 1px solid rgba(42, 171, 238, 0.3);
-  border-radius: 8px;
-  padding: 6px 10px;
-  cursor: pointer;
-  color: var(--primary);
-  display: flex;
   align-items: center;
-  justify-content: center;
-  transition: background 0.2s;
+  gap: 12px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
 }
-.toolbar-btn:hover {
-  background: rgba(42, 171, 238, 0.2);
-}
-.toolbar-menu {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 6px;
-  background: #fff;
-  border-radius: 10px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  min-width: 180px;
-  overflow: hidden;
-  z-index: 200;
-}
-.toolbar-menu-section {
-  padding: 8px 0;
-}
-.toolbar-menu-title {
-  padding: 6px 16px;
-  font-size: 12px;
-  color: var(--text-tertiary);
-  font-weight: 600;
-  text-transform: uppercase;
-}
-.toolbar-menu-item {
-  display: block;
-  width: 100%;
-  padding: 10px 16px;
-  background: none;
-  border: none;
-  text-align: left;
-  cursor: pointer;
+.font-switch-title {
   font-size: 14px;
-  color: var(--text);
-  transition: background 0.2s;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 2px;
 }
-.toolbar-menu-item:hover {
-  background: var(--bg-hover);
+.font-switch-options {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
 }
-.toolbar-menu-item.active {
+.font-switch-btn {
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+.font-switch-btn:hover {
+  border-color: var(--primary);
   color: var(--primary);
+  background: rgba(42, 171, 238, 0.08);
+}
+.font-switch-btn.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
   font-weight: 600;
 }
 
@@ -2920,16 +2951,9 @@ body.font-cartoon .mail-view-content {
 
 /* --- 响应式设计（手机适配 V0.65 增强） --- */
 @media (max-width: 768px) {
-  .top-toolbar {
-    top: 8px;
-    right: 8px;
-  }
   .clock-widget {
     font-size: 12px;
     padding: 4px 10px;
-  }
-  .toolbar-btn {
-    padding: 4px 8px;
   }
   .messages-list {
     padding: 8px;
@@ -3009,19 +3033,9 @@ body.font-cartoon .mail-view-content {
     padding: 6px 4px;
     font-size: 11px;
   }
-  .top-toolbar {
-    gap: 4px;
-  }
   .clock-widget {
     font-size: 11px;
     padding: 3px 8px;
-  }
-  .toolbar-btn {
-    padding: 3px 6px;
-  }
-  .toolbar-btn svg {
-    width: 16px;
-    height: 16px;
   }
   .messages-list .message-bubble {
     max-width: 85%;
@@ -3031,5 +3045,4 @@ body.font-cartoon .mail-view-content {
   .mail-compose-form textarea {
     font-size: 14px;
   }
-}
 }
