@@ -433,14 +433,18 @@
       showToast('一段好友关系已结束', 'info');
     });
 
-    // V0.6 新增：被封禁通知
+    // V0.65 新增：被封禁通知 - 显示覆盖层
     state.socket.on('banned', (data) => {
-      showToast('您已被封禁' + (data.reason ? '，原因：' + data.reason : ''), 'error');
+      var overlay = document.getElementById('banned-overlay');
+      var reasonEl = document.getElementById('banned-reason-text');
+      if (reasonEl) reasonEl.textContent = data.reason || '违反社区规范';
+      if (overlay) overlay.style.display = 'flex';
       setTimeout(function() {
+        if (overlay) overlay.style.display = 'none';
         localStorage.removeItem('fc_token');
         localStorage.removeItem('fc_user');
         window.location.href = '/index.html';
-      }, 3000);
+      }, 5000);
     });
 
     // V0.6 新增：被警告通知
@@ -2184,6 +2188,18 @@
       preview.className = 'mail-preview';
       preview.textContent = m.content.substring(0, 50) + (m.content.length > 50 ? '...' : '');
       item.appendChild(preview);
+      // V0.65 新增：删除按钮
+      var deleteBtn = document.createElement('button');
+      deleteBtn.className = 'mail-delete-btn';
+      deleteBtn.innerHTML = '&times;';
+      deleteBtn.title = '删除邮件';
+      deleteBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (confirm('确定删除这封邮件吗？')) {
+          deleteMail(m.id);
+        }
+      });
+      item.appendChild(deleteBtn);
       item.addEventListener('click', function() { viewMail(m); });
       el.mailList.appendChild(item);
     });
@@ -2215,7 +2231,7 @@
     try {
       var res = await apiFetch('/api/mails/send', {
         method: 'POST',
-        body: JSON.stringify({ recipientUsername: recipient, subject: subject, content: content }),
+        body: JSON.stringify({ recipientNickname: recipient, subject: subject, content: content }),
       });
       var data = await res.json();
       if (!res.ok) { showToast(data.error || '发送失败', 'error'); return; }
@@ -2227,6 +2243,51 @@
     } catch (err) {
       showToast('发送失败', 'error');
     }
+  }
+
+  // V0.65 新增：删除邮件
+  async function deleteMail(mailId) {
+    try {
+      var res = await apiFetch('/api/mails/' + mailId, { method: 'DELETE' });
+      if (!res.ok) { showToast('删除失败', 'error'); return; }
+      showToast('邮件已删除', 'success');
+      loadMails();
+    } catch (err) {
+      showToast('删除失败', 'error');
+    }
+  }
+
+  // V0.65 新增：@选择在线用户
+  var onlineUserSuggestions = [];
+  async function loadOnlineUsersForMail() {
+    try {
+      var res = await apiFetch('/api/users/online');
+      var data = await res.json();
+      onlineUserSuggestions = data.users || [];
+    } catch (err) {
+      onlineUserSuggestions = [];
+    }
+  }
+
+  function showMailRecipientSuggestions(users) {
+    var box = document.getElementById('mail-recipient-suggestions');
+    if (!box) return;
+    box.innerHTML = '';
+    if (users.length === 0) {
+      box.style.display = 'none';
+      return;
+    }
+    users.forEach(function(u) {
+      var item = document.createElement('div');
+      item.className = 'recipient-suggestion-item';
+      item.textContent = u.nickname;
+      item.addEventListener('click', function() {
+        el.mailRecipient.value = u.nickname;
+        box.style.display = 'none';
+      });
+      box.appendChild(item);
+    });
+    box.style.display = 'block';
   }
 
   // ============================================================
@@ -2450,6 +2511,73 @@
       var file = el.avatarFileInput.files[0];
       if (file) uploadAvatar(file);
     });
+
+    // V0.65 新增：功能栏按钮点击切换
+    var toolbarBtn = document.getElementById('toolbar-btn');
+    var toolbarMenu = document.getElementById('toolbar-menu');
+    if (toolbarBtn && toolbarMenu) {
+      toolbarBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        toolbarMenu.style.display = toolbarMenu.style.display === 'none' ? 'block' : 'none';
+      });
+      document.addEventListener('click', function(e) {
+        if (!e.target.closest('#toolbar-dropdown')) {
+          toolbarMenu.style.display = 'none';
+        }
+      });
+    }
+
+    // V0.65 新增：字体切换
+    var fontOptions = document.querySelectorAll('.font-option');
+    fontOptions.forEach(function(opt) {
+      opt.addEventListener('click', function() {
+        var fontType = opt.getAttribute('data-font');
+        fontOptions.forEach(function(o) { o.classList.remove('active'); });
+        opt.classList.add('active');
+        document.body.className = document.body.className.replace(/\s*font-\w+/g, '');
+        if (fontType !== 'default') {
+          document.body.classList.add('font-' + fontType);
+        }
+        localStorage.setItem('fc_font', fontType);
+        if (toolbarMenu) toolbarMenu.style.display = 'none';
+        showToast('字体已切换', 'success');
+      });
+    });
+
+    // V0.65 新增：恢复字体设置
+    var savedFont = localStorage.getItem('fc_font');
+    if (savedFont && savedFont !== 'default') {
+      document.body.classList.add('font-' + savedFont);
+      fontOptions.forEach(function(o) {
+        o.classList.toggle('active', o.getAttribute('data-font') === savedFont);
+      });
+    }
+
+    // V0.65 新增：邮件收件人@选择
+    if (el.mailRecipient) {
+      el.mailRecipient.addEventListener('input', function() {
+        var val = el.mailRecipient.value;
+        var atIdx = val.lastIndexOf('@');
+        if (atIdx >= 0) {
+          var query = val.substring(atIdx + 1).toLowerCase();
+          loadOnlineUsersForMail().then(function() {
+            var filtered = onlineUserSuggestions.filter(function(u) {
+              return u.nickname.toLowerCase().includes(query);
+            });
+            showMailRecipientSuggestions(filtered);
+          });
+        } else {
+          var box = document.getElementById('mail-recipient-suggestions');
+          if (box) box.style.display = 'none';
+        }
+      });
+      el.mailRecipient.addEventListener('blur', function() {
+        setTimeout(function() {
+          var box = document.getElementById('mail-recipient-suggestions');
+          if (box) box.style.display = 'none';
+        }, 200);
+      });
+    }
 
     // 涟漪效果绑定到按钮
     document.querySelectorAll('.btn-primary, .send-btn, .icon-btn').forEach((btn) => {
