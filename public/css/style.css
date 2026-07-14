@@ -1788,3 +1788,177 @@ input, textarea {
 .avatar-online-dot::after {
   will-change: transform, opacity;
 }
+
+/* ============================================================
+   V0.3 新增：好友系统样式
+   ============================================================ */
+
+/* 侧边栏标签切换栏 */
+.sidebar-tabs {
+  display: flex;
+  position: relative;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  padding: 0 8px;
+}
+
+.sidebar-tab {
+  flex: 1;
+  padding: 12px 16px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: color 0.2s, border-bottom 0.2s;
+  border-bottom: 2px solid transparent;
+  position: relative;
+}
+
+.sidebar-tab:hover {
+  color: var(--primary);
+}
+
+.sidebar-tab.active {
+  color: var(--primary);
+  border-bottom: 2px solid var(--primary);
+}
+
+/* 好友请求红色徽章 */
+.sidebar-tab-badge {
+  position: absolute;
+  top: 6px;
+  right: calc(25% - 20px);
+  background: var(--red);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  box-shadow: 0 1px 3px rgba(229, 57, 53, 0.4);
+}
+
+/* 好友面板 */
+.friends-panel {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+.friends-section {
+  padding: 4px 0;
+}
+
+.friends-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  padding: 12px 16px 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* 好友列表项 */
+.friend-list-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+  gap: 12px;
+}
+
+.friend-list-item:hover {
+  background: var(--bg-hover);
+}
+
+.friend-list-item .avatar {
+  flex-shrink: 0;
+}
+
+.friend-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.friend-item-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friend-item-username {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.friend-item-status {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+/* 好友请求项 */
+.friend-request-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  gap: 12px;
+  transition: background 0.15s;
+}
+
+.friend-request-item:hover {
+  background: var(--bg-hover);
+}
+
+/* 好友操作按钮 */
+.friend-action-btn {
+  border: none;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+  flex-shrink: 0;
+}
+
+.friend-action-btn:active {
+  transform: scale(0.95);
+}
+
+.friend-action-btn.accept {
+  background: var(--green);
+  color: #fff;
+}
+
+.friend-action-btn.accept:hover {
+  opacity: 0.85;
+}
+
+.friend-action-btn.reject {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.friend-action-btn.reject:hover {
+  background: var(--red);
+  color: #fff;
+}
+
+/* 空提示 */
+.empty-hint {
+  text-align: center;
+  padding: 30px 20px;
+  color: var(--text-tertiary);
+  font-size: 14px;
+}
