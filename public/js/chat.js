@@ -70,6 +70,11 @@
     friends: [],               // 好友列表
     friendRequests: [],        // 好友请求列表
     activeTab: 'chats',        // 当前侧边栏标签
+    // V0.4 新增：音乐系统
+    musicList: [],             // 音乐列表
+    currentMusic: null,        // 当前播放的音乐
+    isPlaying: false,          // 是否正在播放
+    isAdmin: false,            // 是否是管理员
   };
 
   // ============================================================
@@ -131,6 +136,26 @@
     friendRequestList: document.getElementById('friend-request-list'),
     friendRequestSection: document.getElementById('friend-requests-section'),
     friendRequestBadge: document.getElementById('friend-request-badge'),
+    // V0.4 新增：音乐系统
+    musicPanel: document.getElementById('music-panel'),
+    musicListEl: document.getElementById('music-list'),
+    musicUploadBtn: document.getElementById('music-upload-btn'),
+    musicUploadModal: document.getElementById('music-upload-modal'),
+    closeMusicUploadBtn: document.getElementById('close-music-upload-btn'),
+    musicTitleInput: document.getElementById('music-title-input'),
+    musicFileInput: document.getElementById('music-file-input'),
+    fileUploadArea: document.getElementById('file-upload-area'),
+    fileUploadHint: document.getElementById('file-upload-hint'),
+    uploadMusicBtn: document.getElementById('upload-music-btn'),
+    musicPlayer: document.getElementById('music-player'),
+    playerTitle: document.getElementById('player-title'),
+    playerCurrent: document.getElementById('player-current'),
+    playerDuration: document.getElementById('player-duration'),
+    playerPlayBtn: document.getElementById('player-play-btn'),
+    playerPauseBtn: document.getElementById('player-pause-btn'),
+    playerProgress: document.getElementById('player-progress'),
+    playerProgressBar: document.getElementById('player-progress-bar'),
+    audioPlayer: document.getElementById('audio-player'),
   };
 
   // ============================================================
@@ -1505,14 +1530,218 @@
     document.querySelectorAll('.sidebar-tab').forEach((t) => {
       t.classList.toggle('active', t.dataset.stab === tabName);
     });
-    if (tabName === 'chats') {
-      el.convList.style.display = 'block';
-      el.friendsPanel.style.display = 'none';
-    } else {
-      el.convList.style.display = 'none';
-      el.friendsPanel.style.display = 'block';
+    el.convList.style.display = tabName === 'chats' ? 'block' : 'none';
+    el.friendsPanel.style.display = tabName === 'friends' ? 'block' : 'none';
+    el.musicPanel.style.display = tabName === 'music' ? 'block' : 'none';
+    if (tabName === 'friends') {
       loadFriends();
       loadFriendRequests();
+    }
+    if (tabName === 'music') {
+      loadMusicList();
+    }
+  }
+
+  // ============================================================
+  // V0.4 新增：音乐系统
+  // ============================================================
+
+  /** 格式化音频时长 */
+  function formatDuration(seconds) {
+    if (!seconds || isNaN(seconds)) return '0:00';
+    var m = Math.floor(seconds / 60);
+    var s = Math.floor(seconds % 60);
+    return m + ':' + String(s).padStart(2, '0');
+  }
+
+  /** 检查当前用户是否是管理员 */
+  async function checkAdmin() {
+    try {
+      const res = await apiFetch('/api/me');
+      const data = await res.json();
+      state.isAdmin = !!(data.user && data.user.isAdmin);
+      if (state.isAdmin) {
+        el.musicUploadBtn.style.display = 'flex';
+      }
+    } catch (err) {
+      console.error('检查管理员状态失败:', err);
+    }
+  }
+
+  /** 加载音乐列表 */
+  async function loadMusicList() {
+    try {
+      const res = await apiFetch('/api/music/list');
+      const data = await res.json();
+      state.musicList = data.music || [];
+      renderMusicList();
+    } catch (err) {
+      console.error('加载音乐列表失败:', err);
+    }
+  }
+
+  /** 渲染音乐列表 */
+  function renderMusicList() {
+    el.musicListEl.innerHTML = '';
+    if (state.musicList.length === 0) {
+      el.musicListEl.innerHTML = '<p class="empty-hint">暂无音乐</p>';
+      return;
+    }
+    state.musicList.forEach(function(music) {
+      const item = document.createElement('div');
+      item.className = 'music-list-item';
+      if (state.currentMusic && state.currentMusic.id === music.id) {
+        item.classList.add('playing');
+      }
+
+      const icon = document.createElement('div');
+      icon.className = 'music-item-icon';
+      icon.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>';
+      item.appendChild(icon);
+
+      const info = document.createElement('div');
+      info.className = 'music-item-info';
+
+      const title = document.createElement('div');
+      title.className = 'music-item-title';
+      title.textContent = music.title;
+      info.appendChild(title);
+
+      const meta = document.createElement('div');
+      meta.className = 'music-item-meta';
+      const sizeMB = (music.filesize / 1024 / 1024).toFixed(1);
+      meta.textContent = sizeMB + 'MB \u00b7 \u64ad\u653e' + music.playCount + '\u6b21';
+      info.appendChild(meta);
+
+      item.appendChild(info);
+
+      // 管理员删除按钮
+      if (state.isAdmin) {
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'music-delete-btn';
+        deleteBtn.title = '删除';
+        deleteBtn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>';
+        deleteBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          deleteMusic(music.id);
+        });
+        item.appendChild(deleteBtn);
+      }
+
+      // 点击播放
+      item.addEventListener('click', function() {
+        playMusic(music);
+      });
+
+      el.musicListEl.appendChild(item);
+    });
+  }
+
+  /** 播放音乐 */
+  function playMusic(music) {
+    state.currentMusic = music;
+    el.audioPlayer.src = '/api/music/' + music.id + '/stream?token=' + encodeURIComponent(token);
+    el.audioPlayer.play();
+    state.isPlaying = true;
+    el.musicPlayer.style.display = 'flex';
+    el.playerTitle.textContent = music.title;
+    el.playerPlayBtn.style.display = 'none';
+    el.playerPauseBtn.style.display = 'block';
+    renderMusicList();
+  }
+
+  /** 暂停/恢复播放 */
+  function togglePlay() {
+    if (state.isPlaying) {
+      el.audioPlayer.pause();
+      state.isPlaying = false;
+      el.playerPlayBtn.style.display = 'block';
+      el.playerPauseBtn.style.display = 'none';
+    } else {
+      el.audioPlayer.play();
+      state.isPlaying = true;
+      el.playerPlayBtn.style.display = 'none';
+      el.playerPauseBtn.style.display = 'block';
+    }
+  }
+
+  /** 删除音乐 */
+  async function deleteMusic(musicId) {
+    if (!confirm('确定删除这首音乐吗？')) return;
+    try {
+      const res = await apiFetch('/api/music/' + musicId, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json();
+        showToast(data.error || '删除失败', 'error');
+        return;
+      }
+      showToast('音乐已删除', 'success');
+      if (state.currentMusic && state.currentMusic.id === musicId) {
+        el.audioPlayer.pause();
+        el.audioPlayer.src = '';
+        el.musicPlayer.style.display = 'none';
+        state.currentMusic = null;
+        state.isPlaying = false;
+      }
+      loadMusicList();
+    } catch (err) {
+      console.error('删除音乐失败:', err);
+      showToast('删除音乐失败', 'error');
+    }
+  }
+
+  /** 打开上传弹窗 */
+  function openMusicUploadModal() {
+    el.musicUploadModal.style.display = 'flex';
+    el.musicTitleInput.value = '';
+    el.musicFileInput.value = '';
+    el.uploadMusicBtn.disabled = true;
+    var mainP = el.fileUploadHint.querySelector('.file-upload-main');
+    var subP = el.fileUploadHint.querySelector('.file-upload-sub');
+    if (mainP) mainP.textContent = '点击选择音频文件';
+    if (subP) subP.textContent = '支持 MP3, WAV, OGG, M4A, FLAC（最大 30MB）';
+  }
+
+  /** 关闭上传弹窗 */
+  function closeMusicUploadModal() {
+    el.musicUploadModal.style.display = 'none';
+  }
+
+  /** 上传音乐 */
+  async function uploadMusic() {
+    const file = el.musicFileInput.files[0];
+    if (!file) {
+      showToast('请先选择音频文件', 'error');
+      return;
+    }
+    const title = el.musicTitleInput.value.trim() || file.name.replace(/\.[^.]+$/, '');
+    const formData = new FormData();
+    formData.append('music', file);
+    formData.append('title', title);
+
+    el.uploadMusicBtn.disabled = true;
+    el.uploadMusicBtn.textContent = '上传中...';
+
+    try {
+      const res = await fetch('/api/music/upload', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || '上传失败', 'error');
+        return;
+      }
+      showToast('音乐上传成功', 'success');
+      closeMusicUploadModal();
+      loadMusicList();
+    } catch (err) {
+      console.error('上传音乐失败:', err);
+      showToast('上传音乐失败', 'error');
+    } finally {
+      el.uploadMusicBtn.disabled = false;
+      el.uploadMusicBtn.textContent = '上传';
     }
   }
 
@@ -1644,6 +1873,52 @@
     // V0.2 新增：监听消息区域滚动
     el.messagesArea.addEventListener('scroll', handleMessagesScroll);
 
+    // V0.4 新增：音乐系统事件绑定
+    el.musicUploadBtn.addEventListener('click', openMusicUploadModal);
+    el.closeMusicUploadBtn.addEventListener('click', closeMusicUploadModal);
+    el.musicUploadModal.addEventListener('click', function(e) {
+      if (e.target === el.musicUploadModal) closeMusicUploadModal();
+    });
+    el.fileUploadArea.addEventListener('click', function() {
+      el.musicFileInput.click();
+    });
+    el.musicFileInput.addEventListener('change', function() {
+      var file = el.musicFileInput.files[0];
+      if (file) {
+        var mainP = el.fileUploadHint.querySelector('.file-upload-main');
+        var subP = el.fileUploadHint.querySelector('.file-upload-sub');
+        if (mainP) mainP.textContent = file.name;
+        if (subP) subP.textContent = (file.size / 1024 / 1024).toFixed(1) + 'MB';
+        el.uploadMusicBtn.disabled = false;
+      }
+    });
+    el.uploadMusicBtn.addEventListener('click', uploadMusic);
+    el.playerPlayBtn.addEventListener('click', togglePlay);
+    el.playerPauseBtn.addEventListener('click', togglePlay);
+    el.playerProgress.addEventListener('click', function(e) {
+      var rect = el.playerProgress.getBoundingClientRect();
+      var pct = (e.clientX - rect.left) / rect.width;
+      if (el.audioPlayer.duration) {
+        el.audioPlayer.currentTime = pct * el.audioPlayer.duration;
+      }
+    });
+    el.audioPlayer.addEventListener('loadedmetadata', function() {
+      el.playerDuration.textContent = formatDuration(el.audioPlayer.duration);
+    });
+    el.audioPlayer.addEventListener('timeupdate', function() {
+      el.playerCurrent.textContent = formatDuration(el.audioPlayer.currentTime);
+      if (el.audioPlayer.duration) {
+        var pct = (el.audioPlayer.currentTime / el.audioPlayer.duration) * 100;
+        el.playerProgressBar.style.width = pct + '%';
+      }
+    });
+    el.audioPlayer.addEventListener('ended', function() {
+      state.isPlaying = false;
+      el.playerPlayBtn.style.display = 'block';
+      el.playerPauseBtn.style.display = 'none';
+      el.playerProgressBar.style.width = '0%';
+    });
+
     // 涟漪效果绑定到按钮
     document.querySelectorAll('.btn-primary, .send-btn, .icon-btn').forEach((btn) => {
       btn.addEventListener('click', addRipple);
@@ -1673,6 +1948,7 @@
     connectSocket();
     loadConversations();
     loadFriendRequests(); // V0.3: 启动时加载好友请求
+    checkAdmin(); // V0.4: 检查管理员状态
     updateSendBtnIcon(); // 初始化发送按钮图标状态
   }
 
