@@ -23,7 +23,7 @@ const multer = require('multer');
 // ============================================================
 // 配置常量
 // ============================================================
-const APP_VERSION = 'v0.65';
+const APP_VERSION = 'v0.65.1';
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0'; // 监听所有网络接口，允许局域网访问
 const JWT_SECRET = process.env.JWT_SECRET || 'flashchat-secret-key-v0.2-please-change-in-production';
