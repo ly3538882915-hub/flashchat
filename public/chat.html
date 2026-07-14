@@ -152,24 +152,9 @@
 
     <!-- 右侧聊天区域 -->
     <main class="chat-main" id="chat-main">
-      <!-- V0.65 新增：右上角工具栏（时钟+功能栏） -->
-      <div class="top-toolbar" id="top-toolbar">
-        <div class="clock-widget" id="clock-widget">
-          <span id="clock-display">--</span>
-        </div>
-        <div class="toolbar-dropdown" id="toolbar-dropdown">
-          <button class="toolbar-btn" id="toolbar-btn" title="功能栏">
-            <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
-          </button>
-          <div class="toolbar-menu" id="toolbar-menu" style="display:none;">
-            <div class="toolbar-menu-section">
-              <div class="toolbar-menu-title">字体切换</div>
-              <button class="toolbar-menu-item font-option active" data-font="default">默认字体</button>
-              <button class="toolbar-menu-item font-option" data-font="songti">宋体</button>
-              <button class="toolbar-menu-item font-option" data-font="cartoon">卡通字体</button>
-            </div>
-          </div>
-        </div>
+      <!-- V0.65 新增：右上角时钟 -->
+      <div class="clock-widget" id="clock-widget">
+        <span id="clock-display">--</span>
       </div>
       <!-- 空状态（Telegram 风格气泡图标 + 浮动动画） -->
       <div class="chat-empty" id="chat-empty">
@@ -190,6 +175,16 @@
         </div>
         <h2>选择一个会话开始聊天</h2>
         <p>或点击右下角按钮发起新对话</p>
+
+        <!-- V0.65.2 字体切换面板 -->
+        <div class="font-switch-panel" id="font-switch-panel">
+          <div class="font-switch-title">字体切换</div>
+          <div class="font-switch-options">
+            <button class="font-switch-btn font-option active" data-font="default">默认</button>
+            <button class="font-switch-btn font-option" data-font="songti">宋体</button>
+            <button class="font-switch-btn font-option" data-font="cartoon">卡通</button>
+          </div>
+        </div>
       </div>
 
       <!-- 聊天内容 -->
