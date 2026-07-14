@@ -25,8 +25,10 @@
         <button class="sidebar-tab active" data-stab="chats">聊天</button>
         <button class="sidebar-tab" data-stab="friends">好友</button>
         <button class="sidebar-tab" data-stab="music">音乐</button>
+        <button class="sidebar-tab" data-stab="mail">邮件</button>
         <button class="sidebar-tab admin-only-tab" data-stab="admin" style="display:none;">用户管理</button>
         <span class="sidebar-tab-badge" id="friend-request-badge" style="display:none;">0</span>
+        <span class="sidebar-tab-badge mail-badge" id="mail-badge" style="display:none;">0</span>
       </div>
 
       <div class="conversation-list" id="conversation-list">
@@ -61,6 +63,19 @@
             <p class="empty-hint">暂无音乐</p>
           </div>
         </div>
+        <!-- V0.6 新增：音乐建议区 -->
+        <div class="music-section music-suggestion-section">
+          <div class="music-section-title">
+            <span>歌曲建议</span>
+          </div>
+          <div class="music-suggestion-form">
+            <input type="text" id="suggestion-song-name" placeholder="歌曲名称" />
+            <input type="text" id="suggestion-artist" placeholder="歌手（可选）" />
+            <textarea id="suggestion-note" placeholder="想说的话（可选）" rows="2"></textarea>
+            <button class="btn-primary btn-sm" id="submit-suggestion-btn">提交建议</button>
+          </div>
+          <div class="music-suggestion-list" id="music-suggestion-list"></div>
+        </div>
       </div>
 
       <!-- V0.5 新增：管理员用户管理面板 -->
@@ -88,6 +103,32 @@
         </div>
       </div>
 
+      <!-- V0.6 新增：邮件面板 -->
+      <div class="mail-panel" id="mail-panel" style="display:none;">
+        <div class="mail-section">
+          <div class="mail-section-title">
+            <span>写邮件</span>
+          </div>
+          <div class="mail-compose-form">
+            <input type="text" id="mail-recipient" placeholder="收件人用户名" />
+            <input type="text" id="mail-subject" placeholder="邮件主题" />
+            <textarea id="mail-content" placeholder="邮件内容" rows="4"></textarea>
+            <button class="btn-primary btn-sm" id="send-mail-btn">发送邮件</button>
+          </div>
+        </div>
+        <div class="mail-section">
+          <div class="mail-section-title">
+            <span>收件箱</span>
+            <button class="admin-refresh-btn" id="mail-refresh-btn" title="刷新">
+              <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+            </button>
+          </div>
+          <div class="mail-list" id="mail-list">
+            <p class="empty-hint">暂无邮件</p>
+          </div>
+        </div>
+      </div>
+
       <!-- 底部当前用户信息 -->
       <div class="sidebar-footer" id="sidebar-footer">
         <div class="avatar" id="my-avatar"></div>
@@ -108,6 +149,10 @@
 
     <!-- 右侧聊天区域 -->
     <main class="chat-main" id="chat-main">
+      <!-- V0.6 新增：右上角实时时钟 -->
+      <div class="clock-widget" id="clock-widget">
+        <span id="clock-display">--</span>
+      </div>
       <!-- 空状态（Telegram 风格气泡图标 + 浮动动画） -->
       <div class="chat-empty" id="chat-empty">
         <div class="empty-icon-float">
@@ -253,6 +298,15 @@
           </button>
         </div>
         <div class="modal-pane active">
+          <!-- V0.6 新增：头像上传 -->
+          <div class="form-group">
+            <label>头像</label>
+            <div class="avatar-upload-area" id="avatar-upload-area">
+              <div class="avatar-upload-preview" id="avatar-upload-preview"></div>
+              <div class="avatar-upload-hint">点击更换头像</div>
+              <input type="file" id="avatar-file-input" accept="image/*" style="display:none;" />
+            </div>
+          </div>
           <div class="form-group">
             <label for="settings-nickname">修改昵称</label>
             <input type="text" id="settings-nickname" placeholder="输入新昵称" />
@@ -285,11 +339,31 @@
               <div class="file-upload-hint" id="file-upload-hint">
                 <svg viewBox="0 0 24 24" width="36" height="36"><path fill="currentColor" d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
                 <p class="file-upload-main">点击选择音频文件</p>
-                <p class="file-upload-sub">支持 MP3, WAV, OGG, M4A, FLAC（最大 30MB）</p>
+                <p class="file-upload-sub">支持 MP3, WAV, OGG, M4A, FLAC（最大 300MB）</p>
               </div>
             </div>
           </div>
           <button class="btn-primary" id="upload-music-btn" disabled>上传</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- V0.6 新增：邮件查看弹窗 -->
+    <div class="modal-overlay" id="mail-view-modal" style="display:none;">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="mail-view-subject">邮件</h3>
+          <button class="icon-btn" id="close-mail-view-btn">
+            <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+          </button>
+        </div>
+        <div class="modal-pane active">
+          <div class="mail-view-meta">
+            <div>发件人: <span id="mail-view-sender"></span></div>
+            <div>时间: <span id="mail-view-time"></span></div>
+          </div>
+          <hr class="divider" />
+          <div class="mail-view-content" id="mail-view-content"></div>
         </div>
       </div>
     </div>
