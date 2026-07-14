@@ -1,10 +1,23 @@
 /**
- * FlashChat Web V0.2 - 认证页面逻辑（登录/注册）
- * 增加转场动画、错误抖动动画、标签滑动指示器
+ * FlashChat Web V0.6 - 认证页面逻辑（登录/注册）
+ * V0.6 新增：违禁词前端验证、注册后公告弹窗
  */
 
 (function () {
   'use strict';
+
+  // V0.6 新增：违禁词列表（与后端同步）
+  const BANNED_WORDS = [
+    'sb', 'SB', '傻逼', '傻子', '操你', '草泥马', '日你', 'fuck', 'shit',
+    'bitch', 'bastard', '智障', '废物', '滚蛋', '去死', '贱人', '婊子',
+    '妈的', '他妈', '你妈', '王八蛋', '混蛋', '畜生', '狗屎', 'crap',
+    'dick', 'pussy', 'asshole', 'nigger', '纳粹'
+  ];
+
+  function hasBannedWord(text) {
+    const lower = text.toLowerCase();
+    return BANNED_WORDS.some(w => lower.includes(w.toLowerCase()));
+  }
 
   // 如果已登录，直接跳转聊天页
   const token = localStorage.getItem('fc_token');
@@ -142,6 +155,16 @@
       return;
     }
 
+    // V0.6 新增：前端违禁词检查
+    if (hasBannedWord(username)) {
+      showError('register-error', '用户名包含违禁词，请修改');
+      return;
+    }
+    if (hasBannedWord(nickname)) {
+      showError('register-error', '昵称包含违禁词，请修改');
+      return;
+    }
+
     const submitBtn = registerForm.querySelector('.auth-submit');
     const btnText = submitBtn.querySelector('.btn-text');
     submitBtn.disabled = true;
@@ -166,8 +189,9 @@
       localStorage.setItem('fc_token', data.token);
       localStorage.setItem('fc_user', JSON.stringify(data.user));
 
-      // 转场动画后跳转
-      transitionToChat();
+      // V0.6 新增：注册成功后显示公告弹窗
+      const isFreshRegister = true;
+      showAnnouncement(isFreshRegister);
     } catch (err) {
       showError('register-error', '网络错误，请重试');
       submitBtn.disabled = false;
@@ -185,5 +209,49 @@
     document.addEventListener('DOMContentLoaded', initTabIndicator);
   } else {
     initTabIndicator();
+  }
+
+  // V0.6 新增：显示软件公告弹窗
+  async function showAnnouncement() {
+    try {
+      const res = await fetch('/api/announcement');
+      const data = await res.json();
+
+      const modal = document.getElementById('announcement-modal');
+      const titleEl = document.getElementById('announcement-title');
+      const textEl = document.getElementById('announcement-text');
+      const contentEl = document.getElementById('announcement-content');
+      const confirmBtn = document.getElementById('announcement-confirm-btn');
+      const scrollHint = document.getElementById('announcement-scroll-hint');
+
+      if (titleEl) titleEl.textContent = data.title || '软件公告';
+      if (textEl) textEl.textContent = data.content || '';
+
+      if (modal) modal.style.display = 'flex';
+
+      // 监听滚动 - 滚到底部才能点确认
+      if (contentEl) {
+        contentEl.addEventListener('scroll', function checkScroll() {
+          if (contentEl.scrollTop + contentEl.clientHeight >= contentEl.scrollHeight - 5) {
+            if (confirmBtn) confirmBtn.disabled = false;
+            if (scrollHint) scrollHint.style.display = 'none';
+            contentEl.removeEventListener('scroll', checkScroll);
+          }
+        });
+      }
+
+      // 确认按钮 - 转场跳转
+      if (confirmBtn) {
+        confirmBtn.addEventListener('click', function handler() {
+          if (modal) modal.style.display = 'none';
+          confirmBtn.removeEventListener('click', handler);
+          transitionToChat();
+        });
+      }
+    } catch (err) {
+      console.error('获取公告失败:', err);
+      // 公告获取失败也允许进入
+      transitionToChat();
+    }
   }
 })();
