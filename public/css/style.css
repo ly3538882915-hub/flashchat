@@ -2449,20 +2449,20 @@ body:has(.music-player[style*="flex"]) .messages-area {
 
 /* 实时时钟 */
 .clock-widget {
-  position: absolute;
-  top: 10px;
-  right: 16px;
-  z-index: 100;
-  font-size: 13px;
-  color: var(--text-tertiary);
-  font-family: 'Courier New', monospace;
+  background: rgba(42, 171, 238, 0.1);
+  border: 1px solid rgba(42, 171, 238, 0.3);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 14px;
   font-weight: 500;
-  letter-spacing: 1px;
-  background: var(--bg);
-  padding: 2px 10px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   pointer-events: none;
+  position: static;
+  margin-bottom: 8px;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 1px;
 }
 
 /* 邮件面板 */
@@ -2776,20 +2776,10 @@ body:has(.music-player[style*="flex"]) .messages-area {
   top: 12px;
   right: 12px;
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0;
   z-index: 100;
-}
-.clock-widget {
-  background: rgba(42, 171, 238, 0.1);
-  border: 1px solid rgba(42, 171, 238, 0.3);
-  border-radius: 8px;
-  padding: 6px 14px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--primary);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 .toolbar-dropdown {
   position: relative;
