@@ -23,7 +23,7 @@ const multer = require('multer');
 // ============================================================
 // 配置常量
 // ============================================================
-const APP_VERSION = 'v0.65.2';
+const APP_VERSION = 'v0.66';
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0'; // 监听所有网络接口，允许局域网访问
 const JWT_SECRET = process.env.JWT_SECRET || 'flashchat-secret-key-v0.2-please-change-in-production';
@@ -51,14 +51,14 @@ const BANNED_WORDS = [
 
 // V0.65 新增：软件公告内容
 const ANNOUNCEMENT = {
-  version: 'v0.65',
-  title: 'FlashChat 公告',
+  version: 'v0.66',
+  title: 'Telegram FlashChat 公告',
   content: [
-    '软件开发运营商 - FlashChat工作室',
+    '软件开发运营商 - Telegram FlashChat工作室',
     '',
     '如有问题可以通过邮箱反映给管理员。',
     '',
-    '— FlashChat工作室'
+    '— Telegram FlashChat工作室'
   ].join('\n'),
   updatedAt: new Date().toISOString(),
 };
@@ -190,6 +190,9 @@ try { db.exec('ALTER TABLE users ADD COLUMN avatar_url TEXT'); } catch(e) {}
 try { db.exec('ALTER TABLE users ADD COLUMN banned INTEGER DEFAULT 0'); } catch(e) {}
 try { db.exec('ALTER TABLE users ADD COLUMN banned_reason TEXT'); } catch(e) {}
 
+// V0.66 新增：为 conversations 表添加 description（群公告）字段
+try { db.exec('ALTER TABLE conversations ADD COLUMN description TEXT'); } catch(e) {}
+
 // 预编译语句（参数化查询，防 SQL 注入）
 const stmts = {
   insertUser: db.prepare(
@@ -199,7 +202,7 @@ const stmts = {
   getUserByNickname: db.prepare('SELECT * FROM users WHERE nickname = ?'),
   getUserById: db.prepare('SELECT * FROM users WHERE id = ?'),
   searchUsers: db.prepare(
-    'SELECT id, username, nickname, avatar_color, created_at FROM users WHERE username LIKE ? OR nickname LIKE ? LIMIT 20'
+    'SELECT id, username, nickname, avatar_color, avatar_url, created_at FROM users WHERE username LIKE ? OR nickname LIKE ? LIMIT 20'
   ),
   getAllUsers: db.prepare(
     'SELECT id, username, nickname, avatar_color, avatar_url, banned, banned_reason, created_at FROM users ORDER BY created_at DESC'
@@ -317,6 +320,16 @@ const stmts = {
 
   // V0.6 新增：头像
   updateUserAvatar: db.prepare('UPDATE users SET avatar_url = ? WHERE id = ?'),
+
+  // V0.66 新增：群聊功能预编译语句
+  updateGroupInfo: db.prepare('UPDATE conversations SET name = ?, description = ? WHERE id = ?'),
+  getConversationDescription: db.prepare('SELECT description FROM conversations WHERE id = ?'),
+  addMember: db.prepare('INSERT OR IGNORE INTO conversation_members (conversation_id, user_id, joined_at) VALUES (?, ?, ?)'),
+  removeMember: db.prepare('DELETE FROM conversation_members WHERE conversation_id = ? AND user_id = ?'),
+  getMemberCount: db.prepare('SELECT COUNT(*) as cnt FROM conversation_members WHERE conversation_id = ?'),
+  deleteConversation: db.prepare('DELETE FROM conversations WHERE id = ?'),
+  deleteConversationMembers: db.prepare('DELETE FROM conversation_members WHERE conversation_id = ?'),
+  deleteConversationMessages: db.prepare('DELETE FROM messages WHERE conversation_id = ?'),
 };
 
 // ============================================================
@@ -517,12 +530,14 @@ function buildConversationDetail(conversation, currentUserId) {
   // 私聊会话：显示对方昵称作为标题
   let displayName = conversation.name;
   let displayColor = conversation.avatar_color;
+  let otherAvatarUrl = null;
   if (conversation.type === 'private') {
     const otherId = members.find((m) => m !== currentUserId) || currentUserId;
     const other = stmts.getUserById.get(otherId);
     if (other) {
       displayName = other.nickname;
       displayColor = other.avatar_color;
+      otherAvatarUrl = other.avatar_url || null;
     }
   }
 
@@ -531,6 +546,8 @@ function buildConversationDetail(conversation, currentUserId) {
     type: conversation.type,
     name: displayName,
     avatarColor: displayColor,
+    otherAvatarUrl: otherAvatarUrl,
+    description: conversation.description || null,
     createdBy: conversation.created_by,
     createdAt: conversation.created_at,
     members,
@@ -669,6 +686,7 @@ app.get('/api/users/search', authMiddleware, (req, res) => {
       username: u.username,
       nickname: u.nickname,
       avatarColor: u.avatar_color,
+      avatarUrl: u.avatar_url || null,
       online: isUserOnline(u.id),
     }));
   res.json({ users });
@@ -962,6 +980,7 @@ app.get('/api/friends', authMiddleware, (req, res) => {
       username: u.username,
       nickname: u.nickname,
       avatarColor: u.avatar_color,
+      avatarUrl: u.avatar_url || null,
       online: isUserOnline(u.id),
       since: row.accepted_at,
     };
@@ -981,6 +1000,7 @@ app.get('/api/friends/requests', authMiddleware, (req, res) => {
         username: u.username,
         nickname: u.nickname,
         avatarColor: u.avatar_color,
+        avatarUrl: u.avatar_url || null,
       },
       createdAt: row.created_at,
     };
@@ -1350,6 +1370,159 @@ app.post('/api/users/avatar', authMiddleware, avatarUpload.single('avatar'), (re
 // 静态访问头像文件
 app.use('/avatars', express.static(AVATAR_DIR));
 
+// ============================================================
+// V0.66 新增：群聊管理 API（修改群信息、邀请加群、退出群聊）
+// ============================================================
+
+// 修改群信息（群名/群公告，仅创建者可修改）
+app.put('/api/conversations/:id/group-info', authMiddleware, (req, res) => {
+  const convId = req.params.id;
+  const conv = stmts.getConversationById.get(convId);
+  if (!conv) {
+    return res.status(404).json({ error: '会话不存在' });
+  }
+  if (conv.type !== 'group') {
+    return res.status(400).json({ error: '仅群聊支持此操作' });
+  }
+  // 校验成员资格
+  const members = stmts.getMembersByConversation.all(convId).map((r) => r.user_id);
+  if (!members.includes(req.user.id)) {
+    return res.status(403).json({ error: '无权访问该会话' });
+  }
+
+  const { name, description } = req.body || {};
+  // 验证创建者身份：只有群主才能修改群名和群公告
+  const isOwner = conv.created_by === req.user.id;
+
+  let newName = conv.name;
+  let newDesc = conv.description || '';
+  if (isOwner) {
+    if (name !== undefined && name.trim()) {
+      newName = name.trim();
+    }
+    if (description !== undefined) {
+      newDesc = description.trim();
+    }
+    stmts.updateGroupInfo.run(newName, newDesc, convId);
+  } else {
+    return res.status(403).json({ error: '仅群主可修改群信息' });
+  }
+
+  const updatedConv = stmts.getConversationById.get(convId);
+  // 通过 Socket.IO 通知群内所有成员群信息已更新
+  io.to(convId).emit('group_info_updated', {
+    conversationId: convId,
+    name: newName,
+    description: newDesc,
+  });
+
+  res.json({
+    conversation: buildConversationDetail(updatedConv, req.user.id),
+  });
+});
+
+// 邀请加群（添加新成员到群聊）
+app.post('/api/conversations/:id/members', authMiddleware, (req, res) => {
+  const convId = req.params.id;
+  const conv = stmts.getConversationById.get(convId);
+  if (!conv) {
+    return res.status(404).json({ error: '会话不存在' });
+  }
+  if (conv.type !== 'group') {
+    return res.status(400).json({ error: '仅群聊支持此操作' });
+  }
+  // 校验调用者是群成员
+  const members = stmts.getMembersByConversation.all(convId).map((r) => r.user_id);
+  if (!members.includes(req.user.id)) {
+    return res.status(403).json({ error: '无权操作，您不是该群成员' });
+  }
+
+  const { userIds } = req.body || {};
+  if (!Array.isArray(userIds) || userIds.length === 0) {
+    return res.status(400).json({ error: '请选择要邀请的成员' });
+  }
+
+  const addedUsers = [];
+  const joinedAt = nowISO();
+  for (const memberId of userIds) {
+    if (memberId === req.user.id) continue;
+    // 检查用户是否存在
+    const m = stmts.getUserById.get(memberId);
+    if (!m) continue;
+    // 检查是否已经是群成员
+    if (members.includes(memberId)) continue;
+    stmts.addMember.run(convId, memberId, joinedAt);
+    addedUsers.push(memberId);
+    // 让新成员的在线 socket 加入会话 room
+    joinUserSocketsToRoom(memberId, convId);
+  }
+
+  if (addedUsers.length === 0) {
+    return res.status(400).json({ error: '所选用户已是群成员或不存在' });
+  }
+
+  // 通知群内成员有新成员加入
+  const addedUserInfo = addedUsers.map((uid) => {
+    const u = stmts.getUserById.get(uid);
+    return publicUser(u);
+  });
+  io.to(convId).emit('members_added', {
+    conversationId: convId,
+    members: addedUserInfo,
+  });
+  // 通知被邀请的用户
+  for (const uid of addedUsers) {
+    io.to(`user:${uid}`).emit('added_to_group', {
+      conversationId: convId,
+      conversation: buildConversationDetail(conv, uid),
+    });
+  }
+
+  const updatedConv = stmts.getConversationById.get(convId);
+  res.json({
+    conversation: buildConversationDetail(updatedConv, req.user.id),
+    addedCount: addedUsers.length,
+  });
+});
+
+// 退出群聊
+app.delete('/api/conversations/:id/members', authMiddleware, (req, res) => {
+  const convId = req.params.id;
+  const conv = stmts.getConversationById.get(convId);
+  if (!conv) {
+    return res.status(404).json({ error: '会话不存在' });
+  }
+  if (conv.type !== 'group') {
+    return res.status(400).json({ error: '仅群聊支持此操作' });
+  }
+  // 校验成员资格
+  const members = stmts.getMembersByConversation.all(convId).map((r) => r.user_id);
+  if (!members.includes(req.user.id)) {
+    return res.status(403).json({ error: '您不是该群成员' });
+  }
+
+  // 从 conversation_members 删除当前用户
+  stmts.removeMember.run(convId, req.user.id);
+
+  // 通知其他群成员有人退出
+  io.to(convId).emit('member_left', {
+    conversationId: convId,
+    userId: req.user.id,
+    user: publicUser(req.user),
+  });
+
+  // 检查群是否还有成员
+  const remainingCount = stmts.getMemberCount.get(convId).cnt;
+  if (remainingCount === 0) {
+    // 群没有成员了，删除群及其消息
+    try { stmts.deleteConversationMessages.run(convId); } catch(e) {}
+    try { stmts.deleteConversationMembers.run(convId); } catch(e) {}
+    try { stmts.deleteConversation.run(convId); } catch(e) {}
+  }
+
+  res.json({ ok: true, message: '已退出群聊' });
+});
+
 // 前端路由回退
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -1556,7 +1729,7 @@ process.on('SIGINT', () => {
 server.listen(PORT, HOST, () => {
   const localIP = getLocalIP();
   console.log('========================================');
-  console.log(`  FlashChat Web ${APP_VERSION} 已启动`);
+  console.log(`  Telegram FlashChat Web ${APP_VERSION} 已启动`);
   console.log('========================================');
   console.log(`  本机访问地址:   http://localhost:${PORT}`);
   console.log(`  局域网访问地址: http://${localIP}:${PORT}`);
