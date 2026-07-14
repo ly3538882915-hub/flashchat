@@ -260,13 +260,21 @@
 
       // 监听滚动 - 滚到底部才能点确认
       if (contentEl) {
-        contentEl.addEventListener('scroll', function checkScroll() {
+        var checkScroll = function() {
           if (contentEl.scrollTop + contentEl.clientHeight >= contentEl.scrollHeight - 5) {
             if (confirmBtn) confirmBtn.disabled = false;
             if (scrollHint) scrollHint.style.display = 'none';
             contentEl.removeEventListener('scroll', checkScroll);
           }
-        });
+        };
+        contentEl.addEventListener('scroll', checkScroll);
+        // V0.65 Fix: 如果内容很短不需要滚动，直接启用按钮
+        setTimeout(function() {
+          if (contentEl.scrollHeight <= contentEl.clientHeight + 5) {
+            if (confirmBtn) confirmBtn.disabled = false;
+            if (scrollHint) scrollHint.style.display = 'none';
+          }
+        }, 100);
       }
 
       // 确认按钮 - 转场跳转
