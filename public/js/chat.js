@@ -66,6 +66,10 @@
     unreadScrollCount: 0,      // 滚动离开后新增的未读消息数
     readMessages: new Set(),   // 已读消息 ID 集合（用于 ✓✓ 回执）
     convItemDelay: 0,          // staggered 动画延迟计数器
+    // V0.3 新增：好友系统
+    friends: [],               // 好友列表
+    friendRequests: [],        // 好友请求列表
+    activeTab: 'chats',        // 当前侧边栏标签
   };
 
   // ============================================================
@@ -121,6 +125,12 @@
     logoutIconBtn: document.getElementById('logout-icon-btn'),
     // Toast
     toastContainer: document.getElementById('toast-container'),
+    // V0.3 新增：好友系统
+    friendsPanel: document.getElementById('friends-panel'),
+    friendList: document.getElementById('friend-list'),
+    friendRequestList: document.getElementById('friend-request-list'),
+    friendRequestSection: document.getElementById('friend-requests-section'),
+    friendRequestBadge: document.getElementById('friend-request-badge'),
   };
 
   // ============================================================
@@ -334,6 +344,28 @@
     // V0.2 新增：消息已读回执（对方打开会话时收到）
     state.socket.on('message_read', (data) => {
       handleMessageRead(data);
+    });
+
+    // V0.3 新增：好友请求通知
+    state.socket.on('friend_request', (data) => {
+      showToast(data.from.nickname + ' 请求加你为好友', 'info');
+      loadFriendRequests();
+    });
+
+    // V0.3 新增：好友请求被接受/拒绝
+    state.socket.on('friend_request_response', (data) => {
+      if (data.status === 'accepted') {
+        showToast((data.by ? data.by.nickname : '对方') + ' 接受了你的好友请求', 'success');
+        loadFriends();
+      } else if (data.status === 'rejected') {
+        showToast('你的好友请求被拒绝', 'info');
+      }
+    });
+
+    // V0.3 新增：好友被删除
+    state.socket.on('friend_removed', (data) => {
+      loadFriends();
+      showToast('一段好友关系已结束', 'info');
     });
   }
 
@@ -1091,9 +1123,9 @@
     }
   }
 
-  /** 私聊搜索回调 */
-  function startPrivateChat(user) {
-    createPrivateConversation(user.id);
+  /** V0.3: 搜索用户回调 - 加好友而非直接私聊 */
+  function addFriendCallback(user) {
+    sendFriendRequest(user.id);
     closeNewChatModal();
   }
 
@@ -1286,6 +1318,205 @@
   }
 
   // ============================================================
+  // V0.3 新增：好友系统
+  // ============================================================
+
+  /** 加载好友列表 */
+  async function loadFriends() {
+    try {
+      const res = await apiFetch('/api/friends');
+      const data = await res.json();
+      state.friends = data.friends || [];
+      renderFriendList();
+    } catch (err) {
+      console.error('加载好友列表失败:', err);
+    }
+  }
+
+  /** 加载好友请求 */
+  async function loadFriendRequests() {
+    try {
+      const res = await apiFetch('/api/friends/requests');
+      const data = await res.json();
+      state.friendRequests = data.requests || [];
+      renderFriendRequests();
+    } catch (err) {
+      console.error('加载好友请求失败:', err);
+    }
+  }
+
+  /** 渲染好友列表 */
+  function renderFriendList() {
+    el.friendList.innerHTML = '';
+    if (state.friends.length === 0) {
+      el.friendList.innerHTML = '<p class="empty-hint">还没有好友，点击右上角按钮搜索添加</p>';
+      return;
+    }
+    state.friends.forEach((friend) => {
+      const item = document.createElement('div');
+      item.className = 'friend-list-item';
+
+      const avatar = createAvatar(friend.nickname, friend.avatarColor);
+      item.appendChild(avatar);
+
+      const info = document.createElement('div');
+      info.className = 'friend-item-info';
+
+      const name = document.createElement('div');
+      name.className = 'friend-item-name';
+      name.textContent = friend.nickname;
+      info.appendChild(name);
+
+      const status = document.createElement('div');
+      status.className = 'friend-item-status';
+      status.textContent = friend.online ? '在线' : '离线';
+      status.style.color = friend.online ? '#4caf50' : 'var(--text-tertiary)';
+      info.appendChild(status);
+
+      item.appendChild(info);
+
+      // 点击好友发起私聊
+      item.addEventListener('click', () => {
+        createPrivateConversation(friend.id);
+      });
+
+      el.friendList.appendChild(item);
+    });
+  }
+
+  /** 渲染好友请求列表 */
+  function renderFriendRequests() {
+    const count = state.friendRequests.length;
+    if (count === 0) {
+      el.friendRequestSection.style.display = 'none';
+      el.friendRequestBadge.style.display = 'none';
+      return;
+    }
+
+    el.friendRequestSection.style.display = 'block';
+    el.friendRequestBadge.style.display = 'flex';
+    el.friendRequestBadge.textContent = count > 99 ? '99+' : count;
+
+    el.friendRequestList.innerHTML = '';
+    state.friendRequests.forEach((req) => {
+      const item = document.createElement('div');
+      item.className = 'friend-request-item';
+
+      const avatar = createAvatar(req.from.nickname, req.from.avatarColor, 'sm');
+      item.appendChild(avatar);
+
+      const info = document.createElement('div');
+      info.className = 'friend-item-info';
+
+      const name = document.createElement('div');
+      name.className = 'friend-item-name';
+      name.textContent = req.from.nickname;
+      info.appendChild(name);
+
+      const username = document.createElement('div');
+      username.className = 'friend-item-username';
+      username.textContent = '@' + req.from.username;
+      info.appendChild(username);
+
+      item.appendChild(info);
+
+      // 接受按钮
+      const acceptBtn = document.createElement('button');
+      acceptBtn.className = 'friend-action-btn accept';
+      acceptBtn.textContent = '接受';
+      acceptBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        acceptFriendRequest(req.id);
+      });
+      item.appendChild(acceptBtn);
+
+      // 拒绝按钮
+      const rejectBtn = document.createElement('button');
+      rejectBtn.className = 'friend-action-btn reject';
+      rejectBtn.textContent = '拒绝';
+      rejectBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        rejectFriendRequest(req.id);
+      });
+      item.appendChild(rejectBtn);
+
+      el.friendRequestList.appendChild(item);
+    });
+  }
+
+  /** 发送好友请求 */
+  async function sendFriendRequest(targetUserId) {
+    try {
+      const res = await apiFetch('/api/friends/request', {
+        method: 'POST',
+        body: JSON.stringify({ targetUserId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || '发送好友请求失败', 'error');
+        return;
+      }
+      showToast('好友请求已发送', 'success');
+    } catch (err) {
+      console.error('发送好友请求失败:', err);
+      showToast('发送好友请求失败', 'error');
+    }
+  }
+
+  /** 接受好友请求 */
+  async function acceptFriendRequest(friendshipId) {
+    try {
+      const res = await apiFetch(`/api/friends/${friendshipId}/accept`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || '接受好友请求失败', 'error');
+        return;
+      }
+      showToast('已添加好友', 'success');
+      loadFriendRequests();
+      loadFriends();
+    } catch (err) {
+      console.error('接受好友请求失败:', err);
+    }
+  }
+
+  /** 拒绝好友请求 */
+  async function rejectFriendRequest(friendshipId) {
+    try {
+      const res = await apiFetch(`/api/friends/${friendshipId}/reject`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || '拒绝好友请求失败', 'error');
+        return;
+      }
+      loadFriendRequests();
+    } catch (err) {
+      console.error('拒绝好友请求失败:', err);
+    }
+  }
+
+  /** 切换侧边栏标签 */
+  function switchSidebarTab(tabName) {
+    state.activeTab = tabName;
+    document.querySelectorAll('.sidebar-tab').forEach((t) => {
+      t.classList.toggle('active', t.dataset.stab === tabName);
+    });
+    if (tabName === 'chats') {
+      el.convList.style.display = 'block';
+      el.friendsPanel.style.display = 'none';
+    } else {
+      el.convList.style.display = 'none';
+      el.friendsPanel.style.display = 'block';
+      loadFriends();
+      loadFriendRequests();
+    }
+  }
+
+  // ============================================================
   // 事件绑定
   // ============================================================
   function bindEvents() {
@@ -1339,7 +1570,7 @@
     el.userSearchInput.addEventListener('input', () => {
       clearTimeout(state.searchTimer);
       state.searchTimer = setTimeout(() => {
-        searchUsers(el.userSearchInput.value, el.userSearchResults, startPrivateChat);
+        searchUsers(el.userSearchInput.value, el.userSearchResults, addFriendCallback);
       }, 300);
     });
 
@@ -1366,6 +1597,13 @@
     el.saveProfileBtn.addEventListener('click', saveProfile);
     el.logoutBtn.addEventListener('click', logout);
     el.logoutIconBtn.addEventListener('click', logout);
+
+    // V0.3 新增：侧边栏标签切换（聊天/好友）
+    document.querySelectorAll('.sidebar-tab').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        switchSidebarTab(tab.dataset.stab);
+      });
+    });
 
     // 会话列表搜索
     el.searchInput.addEventListener('input', () => {
@@ -1434,6 +1672,7 @@
     bindEvents();
     connectSocket();
     loadConversations();
+    loadFriendRequests(); // V0.3: 启动时加载好友请求
     updateSendBtnIcon(); // 初始化发送按钮图标状态
   }
 
