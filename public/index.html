@@ -94,6 +94,22 @@
     </div>
   </div>
 
+  <!-- V0.6 新增：注册后软件公告弹窗 -->
+  <div class="modal-overlay" id="announcement-modal" style="display:none;">
+    <div class="modal announcement-modal">
+      <div class="modal-header">
+        <h3 id="announcement-title">软件公告</h3>
+      </div>
+      <div class="announcement-content" id="announcement-content">
+        <pre id="announcement-text"></pre>
+      </div>
+      <div class="announcement-footer">
+        <div class="announcement-scroll-hint" id="announcement-scroll-hint">请向下滑动阅读完公告后继续</div>
+        <button class="btn-primary" id="announcement-confirm-btn" disabled>开始使用</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/js/auth.js"></script>
 </body>
 </html>
