@@ -2698,3 +2698,348 @@ body:has(.music-player[style*="flex"]) .messages-area {
   background: #ff9800;
   color: #fff;
 }
+
+/* ============================================================
+   V0.65 新增样式
+   ============================================================ */
+
+/* --- 封禁覆盖层 --- */
+.banned-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: fadeIn 0.3s ease;
+}
+.banned-card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 40px 50px;
+  max-width: 500px;
+  width: 80%;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  animation: scaleIn 0.3s ease;
+}
+.banned-icon {
+  color: #f44336;
+  margin-bottom: 16px;
+}
+.banned-title {
+  color: #f44336;
+  font-size: 24px;
+  margin: 0 0 16px 0;
+}
+.banned-reason-label {
+  color: #666;
+  font-size: 14px;
+  margin: 0;
+}
+.banned-reason-text {
+  color: #333;
+  font-size: 18px;
+  font-weight: 500;
+  margin: 8px 0 16px 0;
+  padding: 12px;
+  background: #ffebee;
+  border-radius: 8px;
+}
+.banned-hint {
+  color: #999;
+  font-size: 13px;
+  margin: 0;
+}
+.banned-countdown {
+  color: var(--primary);
+  font-size: 13px;
+  margin: 12px 0 0 0;
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* --- 右上角工具栏 --- */
+.top-toolbar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 100;
+}
+.clock-widget {
+  background: rgba(42, 171, 238, 0.1);
+  border: 1px solid rgba(42, 171, 238, 0.3);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.toolbar-dropdown {
+  position: relative;
+}
+.toolbar-btn {
+  background: rgba(42, 171, 238, 0.1);
+  border: 1px solid rgba(42, 171, 238, 0.3);
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+.toolbar-btn:hover {
+  background: rgba(42, 171, 238, 0.2);
+}
+.toolbar-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  min-width: 180px;
+  overflow: hidden;
+  z-index: 200;
+}
+.toolbar-menu-section {
+  padding: 8px 0;
+}
+.toolbar-menu-title {
+  padding: 6px 16px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.toolbar-menu-item {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text);
+  transition: background 0.2s;
+}
+.toolbar-menu-item:hover {
+  background: var(--bg-hover);
+}
+.toolbar-menu-item.active {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* --- 字体切换 --- */
+body.font-songti {
+  font-family: "SimSun", "宋体", "Songti SC", serif;
+}
+body.font-songti .messages-list,
+body.font-songti .message-input,
+body.font-songti .mail-content,
+body.font-songti .mail-view-content {
+  font-family: "SimSun", "宋体", "Songti SC", serif;
+}
+body.font-cartoon {
+  font-family: "Comic Sans MS", "YouYuan", "幼圆", "Yuanti SC", cursive, sans-serif;
+}
+body.font-cartoon .messages-list,
+body.font-cartoon .message-input,
+body.font-cartoon .mail-content,
+body.font-cartoon .mail-view-content {
+  font-family: "Comic Sans MS", "YouYuan", "幼圆", "Yuanti SC", cursive, sans-serif;
+}
+
+/* --- 邮件删除按钮 --- */
+.mail-delete-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(244, 67, 54, 0.1);
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 18px;
+  color: #f44336;
+  line-height: 1;
+  transition: background 0.2s;
+  opacity: 0;
+}
+.mail-list-item {
+  position: relative;
+}
+.mail-list-item:hover .mail-delete-btn {
+  opacity: 1;
+}
+.mail-delete-btn:hover {
+  background: rgba(244, 67, 54, 0.2);
+}
+
+/* --- 邮件@选择建议 --- */
+.mail-recipient-wrapper {
+  position: relative;
+}
+.mail-recipient-suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 50;
+}
+.recipient-suggestion-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+.recipient-suggestion-item:hover {
+  background: var(--bg-hover);
+}
+
+/* --- 响应式设计（手机适配 V0.65 增强） --- */
+@media (max-width: 768px) {
+  .top-toolbar {
+    top: 8px;
+    right: 8px;
+  }
+  .clock-widget {
+    font-size: 12px;
+    padding: 4px 10px;
+  }
+  .toolbar-btn {
+    padding: 4px 8px;
+  }
+  .messages-list {
+    padding: 8px;
+  }
+  .message-input-area {
+    padding: 6px 8px;
+  }
+  #message-input {
+    font-size: 16px;
+  }
+  .modal {
+    width: 92%;
+    max-width: none;
+  }
+  .modal-pane {
+    padding: 12px;
+  }
+  .admin-stats {
+    flex-direction: row;
+    gap: 8px;
+  }
+  .admin-stat-card {
+    flex: 1;
+    padding: 8px;
+  }
+  .admin-stat-num {
+    font-size: 20px;
+  }
+  .music-player {
+    padding: 6px 8px;
+  }
+  .player-info {
+    gap: 6px;
+  }
+  .player-text {
+    font-size: 12px;
+  }
+  .sidebar-tabs {
+    padding: 0 4px;
+  }
+  .sidebar-tab {
+    padding: 8px 6px;
+    font-size: 12px;
+  }
+  .sidebar-header {
+    padding: 8px;
+  }
+  .search-box input {
+    font-size: 14px;
+  }
+  .sidebar-footer {
+    padding: 6px 8px;
+  }
+  .my-nickname {
+    font-size: 13px;
+  }
+  .chat-header {
+    padding: 8px;
+  }
+  .header-name {
+    font-size: 15px;
+  }
+  .header-status {
+    font-size: 12px;
+  }
+  .banned-card {
+    padding: 24px 20px;
+    width: 90%;
+  }
+  .banned-title {
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sidebar-tab {
+    padding: 6px 4px;
+    font-size: 11px;
+  }
+  .top-toolbar {
+    gap: 4px;
+  }
+  .clock-widget {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+  .toolbar-btn {
+    padding: 3px 6px;
+  }
+  .toolbar-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+  .messages-list .message-bubble {
+    max-width: 85%;
+    font-size: 14px;
+  }
+  .mail-compose-form input,
+  .mail-compose-form textarea {
+    font-size: 14px;
+  }
+}
+}
