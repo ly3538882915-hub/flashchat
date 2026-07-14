@@ -1,6 +1,7 @@
 /**
- * FlashChat Web - 服务器入口 V0.2
+ * FlashChat Web - 服务器入口 V0.3
  * Express + Socket.IO + SQLite (better-sqlite3) + JWT 认证
+ * V0.3 新增：完整好友系统（好友请求/接受/拒绝/删除、私聊需好友验证）
  *
  * 启动: node server.js
  * 访问: http://localhost:3000  /  http://<本机IP>:3000
@@ -21,7 +22,7 @@ const { v4: uuidv4 } = require('uuid');
 // ============================================================
 // 配置常量
 // ============================================================
-const APP_VERSION = 'v0.2';
+const APP_VERSION = 'v0.3';
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0'; // 监听所有网络接口，允许局域网访问
 const JWT_SECRET = process.env.JWT_SECRET || 'flashchat-secret-key-v0.2-please-change-in-production';
@@ -89,6 +90,21 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_conv_members ON conversation_members(user_id);
   CREATE INDEX IF NOT EXISTS idx_conv_members_conv ON conversation_members(conversation_id);
+
+  -- V0.3 新增：好友关系表
+  CREATE TABLE IF NOT EXISTS friendships (
+    id TEXT PRIMARY KEY,
+    requester_id TEXT NOT NULL,
+    addressee_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL,
+    accepted_at TEXT,
+    UNIQUE(requester_id, addressee_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_friendships_requester ON friendships(requester_id);
+  CREATE INDEX IF NOT EXISTS idx_friendships_addressee ON friendships(addressee_id);
+  CREATE INDEX IF NOT EXISTS idx_friendships_status ON friendships(status);
 `);
 
 // 预编译语句（参数化查询，防 SQL 注入）
@@ -139,6 +155,39 @@ const stmts = {
   ),
   getMessageCount: db.prepare(
     'SELECT COUNT(*) as cnt FROM messages WHERE conversation_id = ?'
+  ),
+
+  // V0.3 新增：好友关系预编译语句
+  insertFriendship: db.prepare(
+    'INSERT INTO friendships (id, requester_id, addressee_id, status, created_at, accepted_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ),
+  getFriendship: db.prepare(
+    'SELECT * FROM friendships WHERE requester_id = ? AND addressee_id = ?'
+  ),
+  getFriendshipById: db.prepare(
+    'SELECT * FROM friendships WHERE id = ?'
+  ),
+  getIncomingRequests: db.prepare(
+    'SELECT * FROM friendships WHERE addressee_id = ? AND status = ? ORDER BY created_at DESC'
+  ),
+  getOutgoingRequests: db.prepare(
+    'SELECT * FROM friendships WHERE requester_id = ? AND status = ? ORDER BY created_at DESC'
+  ),
+  getFriends: db.prepare(
+    `SELECT * FROM friendships
+     WHERE (requester_id = ? OR addressee_id = ?) AND status = 'accepted'
+     ORDER BY accepted_at DESC`
+  ),
+  updateFriendshipStatus: db.prepare(
+    "UPDATE friendships SET status = ?, accepted_at = ? WHERE id = ?"
+  ),
+  deleteFriendship: db.prepare(
+    'DELETE FROM friendships WHERE id = ?'
+  ),
+  getFriendshipBetween: db.prepare(
+    `SELECT * FROM friendships
+     WHERE (requester_id = ? AND addressee_id = ?)
+        OR (requester_id = ? AND addressee_id = ?)`
   ),
 };
 
@@ -448,6 +497,12 @@ app.post('/api/conversations/private', authMiddleware, (req, res) => {
     return res.status(400).json({ error: '不能与自己创建私聊' });
   }
 
+  // V0.3 新增：检查好友关系（status === 'accepted' 才允许私聊）
+  const friendship = stmts.getFriendshipBetween.get(req.user.id, targetUserId, targetUserId, req.user.id);
+  if (!friendship || friendship.status !== 'accepted') {
+    return res.status(403).json({ error: '需要先加好友才能发起私聊' });
+  }
+
   // 查找已有私聊
   let conv = stmts.getPrivateConversation.get(req.user.id, targetUserId);
   if (!conv) {
@@ -584,6 +639,168 @@ app.get('/api/conversations/:id/members', authMiddleware, (req, res) => {
     };
   });
   res.json({ members: details });
+});
+
+// ============================================================
+// V0.3 新增：好友系统 API 路由
+// ============================================================
+
+// 发送好友请求
+app.post('/api/friends/request', authMiddleware, (req, res) => {
+  const { targetUserId } = req.body || {};
+  if (!targetUserId) {
+    return res.status(400).json({ error: '缺少目标用户 ID' });
+  }
+  if (targetUserId === req.user.id) {
+    return res.status(400).json({ error: '不能加自己为好友' });
+  }
+  const target = stmts.getUserById.get(targetUserId);
+  if (!target) {
+    return res.status(404).json({ error: '目标用户不存在' });
+  }
+
+  // 检查是否已有好友关系
+  const existing = stmts.getFriendshipBetween.get(req.user.id, targetUserId, targetUserId, req.user.id);
+  if (existing) {
+    if (existing.status === 'accepted') {
+      return res.status(409).json({ error: '你们已经是好友了' });
+    }
+    if (existing.status === 'pending' && existing.requester_id === req.user.id) {
+      return res.status(409).json({ error: '已发送过好友请求，等待对方确认' });
+    }
+    // 如果对方之前请求加我（pending），直接接受
+    if (existing.status === 'pending' && existing.requester_id === targetUserId) {
+      stmts.updateFriendshipStatus.run('accepted', nowISO(), existing.id);
+      // 通知对方
+      io.to(`user:${targetUserId}`).emit('friend_request_response', {
+        id: existing.id, status: 'accepted', by: publicUser(req.user),
+      });
+      return res.json({ friendship: { id: existing.id, status: 'accepted' } });
+    }
+    // 如果之前被拒绝过，重新发起请求
+    if (existing.status === 'rejected') {
+      stmts.updateFriendshipStatus.run('pending', null, existing.id);
+      io.to(`user:${targetUserId}`).emit('friend_request', {
+        id: existing.id, from: publicUser(req.user),
+      });
+      return res.json({ friendship: { id: existing.id, status: 'pending' } });
+    }
+  }
+
+  const id = uuidv4();
+  const createdAt = nowISO();
+  stmts.insertFriendship.run(id, req.user.id, targetUserId, 'pending', createdAt, null);
+
+  // Socket.IO 实时通知对方
+  io.to(`user:${targetUserId}`).emit('friend_request', {
+    id, from: publicUser(req.user),
+  });
+
+  res.json({ friendship: { id, status: 'pending' } });
+});
+
+// 接受好友请求
+app.post('/api/friends/:id/accept', authMiddleware, (req, res) => {
+  const friendship = stmts.getFriendshipById.get(req.params.id);
+  if (!friendship) {
+    return res.status(404).json({ error: '好友请求不存在' });
+  }
+  if (friendship.addressee_id !== req.user.id) {
+    return res.status(403).json({ error: '无权操作此请求' });
+  }
+  if (friendship.status !== 'pending') {
+    return res.status(400).json({ error: '该请求已被处理' });
+  }
+
+  const acceptedAt = nowISO();
+  stmts.updateFriendshipStatus.run('accepted', acceptedAt, friendship.id);
+
+  // 通知请求方
+  io.to(`user:${friendship.requester_id}`).emit('friend_request_response', {
+    id: friendship.id, status: 'accepted', by: publicUser(req.user),
+  });
+
+  res.json({ friendship: { id: friendship.id, status: 'accepted' } });
+});
+
+// 拒绝好友请求
+app.post('/api/friends/:id/reject', authMiddleware, (req, res) => {
+  const friendship = stmts.getFriendshipById.get(req.params.id);
+  if (!friendship) {
+    return res.status(404).json({ error: '好友请求不存在' });
+  }
+  if (friendship.addressee_id !== req.user.id) {
+    return res.status(403).json({ error: '无权操作此请求' });
+  }
+  if (friendship.status !== 'pending') {
+    return res.status(400).json({ error: '该请求已被处理' });
+  }
+
+  stmts.updateFriendshipStatus.run('rejected', null, friendship.id);
+
+  // 通知请求方
+  io.to(`user:${friendship.requester_id}`).emit('friend_request_response', {
+    id: friendship.id, status: 'rejected',
+  });
+
+  res.json({ friendship: { id: friendship.id, status: 'rejected' } });
+});
+
+// 获取好友列表
+app.get('/api/friends', authMiddleware, (req, res) => {
+  const rows = stmts.getFriends.all(req.user.id, req.user.id);
+  const friends = rows.map((row) => {
+    const otherId = row.requester_id === req.user.id ? row.addressee_id : row.requester_id;
+    const u = stmts.getUserById.get(otherId);
+    return {
+      friendshipId: row.id,
+      id: u.id,
+      username: u.username,
+      nickname: u.nickname,
+      avatarColor: u.avatar_color,
+      online: isUserOnline(u.id),
+      since: row.accepted_at,
+    };
+  });
+  res.json({ friends });
+});
+
+// 获取好友请求列表（收到的待处理请求）
+app.get('/api/friends/requests', authMiddleware, (req, res) => {
+  const rows = stmts.getIncomingRequests.all(req.user.id, 'pending');
+  const requests = rows.map((row) => {
+    const u = stmts.getUserById.get(row.requester_id);
+    return {
+      id: row.id,
+      from: {
+        id: u.id,
+        username: u.username,
+        nickname: u.nickname,
+        avatarColor: u.avatar_color,
+      },
+      createdAt: row.created_at,
+    };
+  });
+  res.json({ requests });
+});
+
+// 删除好友
+app.delete('/api/friends/:id', authMiddleware, (req, res) => {
+  const friendship = stmts.getFriendshipById.get(req.params.id);
+  if (!friendship) {
+    return res.status(404).json({ error: '好友关系不存在' });
+  }
+  if (friendship.requester_id !== req.user.id && friendship.addressee_id !== req.user.id) {
+    return res.status(403).json({ error: '无权操作' });
+  }
+
+  const otherId = friendship.requester_id === req.user.id ? friendship.addressee_id : friendship.requester_id;
+  stmts.deleteFriendship.run(friendship.id);
+
+  // 通知对方
+  io.to(`user:${otherId}`).emit('friend_removed', { id: friendship.id });
+
+  res.json({ ok: true });
 });
 
 // 前端路由回退
