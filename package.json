@@ -1,0 +1,23 @@
+{
+  "name": "flash-chat-web",
+  "version": "0.2.0",
+  "description": "FlashChat - Telegram风格网页版聊天软件 V0.2",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5",
+    "better-sqlite3": "^11.0.0",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "uuid": "^9.0.1",
+    "cors": "^2.8.5",
+    "node-os-utils": "^1.3.7"
+  }
+}
