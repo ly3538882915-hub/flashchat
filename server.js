@@ -18,11 +18,12 @@ const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
+const multer = require('multer');
 
 // ============================================================
 // 配置常量
 // ============================================================
-const APP_VERSION = 'v0.3';
+const APP_VERSION = 'v0.4';
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0'; // 监听所有网络接口，允许局域网访问
 const JWT_SECRET = process.env.JWT_SECRET || 'flashchat-secret-key-v0.2-please-change-in-production';
@@ -31,6 +32,8 @@ const DB_DIR = path.join(__dirname, 'data');
 const DB_PATH = path.join(DB_DIR, 'chat.db');
 const MESSAGES_PAGE_SIZE = 20;
 const SERVER_START_TIME = new Date().toISOString();
+const MUSIC_DIR = path.join(DB_DIR, 'music');
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || '';
 
 // 头像可选背景色（随机分配给新用户）
 const AVATAR_COLORS = [
@@ -46,6 +49,9 @@ const AVATAR_COLORS = [
 // ============================================================
 if (!fs.existsSync(DB_DIR)) {
   fs.mkdirSync(DB_DIR, { recursive: true });
+}
+if (!fs.existsSync(MUSIC_DIR)) {
+  fs.mkdirSync(MUSIC_DIR, { recursive: true });
 }
 
 const db = new Database(DB_PATH);
@@ -105,6 +111,19 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_friendships_requester ON friendships(requester_id);
   CREATE INDEX IF NOT EXISTS idx_friendships_addressee ON friendships(addressee_id);
   CREATE INDEX IF NOT EXISTS idx_friendships_status ON friendships(status);
+
+  -- V0.4 新增：音乐表
+  CREATE TABLE IF NOT EXISTS music (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    original_name TEXT NOT NULL,
+    filesize INTEGER NOT NULL,
+    mime_type TEXT NOT NULL,
+    uploaded_by TEXT NOT NULL,
+    uploaded_at TEXT NOT NULL,
+    play_count INTEGER DEFAULT 0
+  );
 `);
 
 // 预编译语句（参数化查询，防 SQL 注入）
@@ -189,6 +208,15 @@ const stmts = {
      WHERE (requester_id = ? AND addressee_id = ?)
         OR (requester_id = ? AND addressee_id = ?)`
   ),
+
+  // V0.4 新增：音乐系统预编译语句
+  insertMusic: db.prepare(
+    'INSERT INTO music (id, title, filename, original_name, filesize, mime_type, uploaded_by, uploaded_at, play_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)'
+  ),
+  getMusicById: db.prepare('SELECT * FROM music WHERE id = ?'),
+  getAllMusic: db.prepare('SELECT * FROM music ORDER BY uploaded_at DESC'),
+  deleteMusicRow: db.prepare('DELETE FROM music WHERE id = ?'),
+  incMusicPlayCount: db.prepare('UPDATE music SET play_count = play_count + 1 WHERE id = ?'),
 };
 
 // ============================================================
@@ -249,6 +277,27 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// V0.4 新增：音乐上传 multer 配置
+const musicUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, MUSIC_DIR),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname) || '';
+      cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
+    },
+  }),
+  limits: { fileSize: 30 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedExt = /\.(mp3|wav|ogg|m4a|flac|aac)$/i;
+    const allowedMime = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/ogg', 'audio/m4a', 'audio/x-m4a', 'audio/flac', 'audio/aac', 'audio/mp4', 'audio/x-aiff', 'application/ogg'];
+    if (allowedMime.includes(file.mimetype) || allowedExt.test(file.originalname)) {
+      cb(null, true);
+    } else {
+      cb(new Error('仅支持音频文件 (mp3, wav, ogg, m4a, flac, aac)'));
+    }
+  },
+});
+
 // ----- 工具函数 -----
 function pickAvatarColor() {
   return AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
@@ -267,6 +316,10 @@ function publicUser(user) {
     avatarColor: user.avatar_color,
     createdAt: user.created_at,
   };
+}
+
+function isAdmin(user) {
+  return !!ADMIN_USERNAME && user.username === ADMIN_USERNAME;
 }
 
 function signToken(userId) {
@@ -448,7 +501,7 @@ app.post('/api/login', (req, res) => {
 
 // 获取当前用户
 app.get('/api/me', authMiddleware, (req, res) => {
-  res.json({ user: publicUser(req.user) });
+  res.json({ user: { ...publicUser(req.user), isAdmin: isAdmin(req.user) } });
 });
 
 // 搜索用户
@@ -800,6 +853,101 @@ app.delete('/api/friends/:id', authMiddleware, (req, res) => {
   // 通知对方
   io.to(`user:${otherId}`).emit('friend_removed', { id: friendship.id });
 
+  res.json({ ok: true });
+});
+
+// ============================================================
+// V0.4 新增：音乐系统 API 路由
+// ============================================================
+
+// 上传音乐（仅管理员）
+app.post('/api/music/upload', authMiddleware, (req, res, next) => {
+  if (!isAdmin(req.user)) {
+    return res.status(403).json({ error: '仅管理员可上传音乐' });
+  }
+  next();
+}, musicUpload.single('music'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: '未收到文件或文件格式不支持' });
+  }
+  const id = uuidv4();
+  const title = (req.body.title || req.file.originalname).replace(/\.[^.]+$/, '');
+  const uploadedAt = nowISO();
+  stmts.insertMusic.run(
+    id, title, req.file.filename, req.file.originalname,
+    req.file.size, req.file.mimetype, req.user.id, uploadedAt
+  );
+  const music = stmts.getMusicById.get(id);
+  res.json({
+    music: {
+      id: music.id,
+      title: music.title,
+      originalName: music.original_name,
+      filesize: music.filesize,
+      uploadedAt: music.uploaded_at,
+      playCount: music.play_count,
+    },
+  });
+});
+
+// 获取音乐列表（所有登录用户）
+app.get('/api/music/list', authMiddleware, (req, res) => {
+  const rows = stmts.getAllMusic.all();
+  const musicList = rows.map((m) => ({
+    id: m.id,
+    title: m.title,
+    originalName: m.original_name,
+    filesize: m.filesize,
+    uploadedAt: m.uploaded_at,
+    playCount: m.play_count,
+  }));
+  res.json({ music: musicList });
+});
+
+// 流式播放音乐（支持 query token 认证，因为 <audio> 标签不支持自定义 Header）
+app.get('/api/music/:id/stream', (req, res) => {
+  const token = req.query.token || (req.headers.authorization || '').replace('Bearer ', '');
+  if (!token) {
+    return res.status(401).json({ error: '未提供认证令牌' });
+  }
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    const user = stmts.getUserById.get(payload.sub);
+    if (!user) {
+      return res.status(401).json({ error: '用户不存在' });
+    }
+  } catch (err) {
+    return res.status(401).json({ error: '认证令牌无效' });
+  }
+
+  const music = stmts.getMusicById.get(req.params.id);
+  if (!music) {
+    return res.status(404).json({ error: '音乐不存在' });
+  }
+  const filePath = path.join(MUSIC_DIR, music.filename);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: '音乐文件丢失' });
+  }
+  // 增加播放次数
+  stmts.incMusicPlayCount.run(music.id);
+  // sendFile 自动支持 Range 请求（可拖动进度条）
+  res.sendFile(filePath);
+});
+
+// 删除音乐（仅管理员）
+app.delete('/api/music/:id', authMiddleware, (req, res) => {
+  if (!isAdmin(req.user)) {
+    return res.status(403).json({ error: '仅管理员可删除音乐' });
+  }
+  const music = stmts.getMusicById.get(req.params.id);
+  if (!music) {
+    return res.status(404).json({ error: '音乐不存在' });
+  }
+  const filePath = path.join(MUSIC_DIR, music.filename);
+  if (fs.existsSync(filePath)) {
+    try { fs.unlinkSync(filePath); } catch (e) { /* 忽略文件删除错误 */ }
+  }
+  stmts.deleteMusicRow.run(music.id);
   res.json({ ok: true });
 });
 
