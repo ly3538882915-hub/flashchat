@@ -121,6 +121,14 @@
       });
       const data = await res.json();
 
+      // V0.65 新增：封禁用户显示封禁原因覆盖页面
+      if (res.status === 403 && data.banned) {
+        submitBtn.disabled = false;
+        btnText.textContent = '登录';
+        showBannedOverlay(data.bannedReason || '违反社区规范');
+        return;
+      }
+
       if (!res.ok) {
         showError('login-error', data.error || '登录失败');
         submitBtn.disabled = false;
@@ -132,8 +140,8 @@
       localStorage.setItem('fc_token', data.token);
       localStorage.setItem('fc_user', JSON.stringify(data.user));
 
-      // 转场动画后跳转
-      transitionToChat();
+      // V0.65 新增：登录成功后也显示公告
+      showAnnouncement();
     } catch (err) {
       showError('login-error', '网络错误，请重试');
       submitBtn.disabled = false;
@@ -209,6 +217,27 @@
     document.addEventListener('DOMContentLoaded', initTabIndicator);
   } else {
     initTabIndicator();
+  }
+
+  // V0.65 新增：显示封禁原因覆盖页面
+  function showBannedOverlay(reason) {
+    var overlay = document.getElementById('banned-overlay');
+    if (!overlay) return;
+    var reasonEl = document.getElementById('banned-reason-text');
+    var countdownEl = document.getElementById('banned-countdown');
+    if (reasonEl) reasonEl.textContent = reason;
+    overlay.style.display = 'flex';
+    // 倒计时5秒后自动隐藏
+    var count = 5;
+    if (countdownEl) countdownEl.textContent = count + '秒后返回登录界面...';
+    var timer = setInterval(function() {
+      count--;
+      if (countdownEl) countdownEl.textContent = count + '秒后返回登录界面...';
+      if (count <= 0) {
+        clearInterval(timer);
+        overlay.style.display = 'none';
+      }
+    }, 1000);
   }
 
   // V0.6 新增：显示软件公告弹窗
