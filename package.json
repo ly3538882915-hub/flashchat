@@ -1,7 +1,7 @@
 {
   "name": "flash-chat-web",
-  "version": "0.66",
-  "description": "Telegram FlashChat - Telegram风格网页版聊天软件 V0.66（更名+Logo+头像可见+群聊完善）",
+  "version": "0.7",
+  "description": "Telegram FlashChat - Telegram风格网页版聊天软件 V0.7（苹果动画+超管任命+图片表情动图+主题切换+会员系统+左滑操作+关于页）",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
