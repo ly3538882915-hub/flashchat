@@ -112,6 +112,7 @@
     myAvatar: document.getElementById('my-avatar'),
     myNickname: document.getElementById('my-nickname'),
     chatEmpty: document.getElementById('chat-empty'),
+    chatMain: document.getElementById('chat-main'),
     chatContent: document.getElementById('chat-content'),
     chatHeader: document.getElementById('chat-header'),
     headerAvatar: document.getElementById('header-avatar'),
@@ -997,7 +998,7 @@
 
   // V0.7 新增：返回到会话列表（手机端）
   function goBackToList() {
-    el.chatContent.classList.remove('mobile-show');
+    el.chatMain.classList.remove('mobile-show');
     state.socket.emit('leave_conversation');
     state.currentConvId = null;
     state.currentConv = null;
@@ -1033,6 +1034,11 @@
     state.hasMoreMessages = false;
     state.unreadScrollCount = 0; // 重置滚动未读计数
 
+    // V0.7 Fix: 打开会话时关闭所有左滑状态
+    document.querySelectorAll('.conversation-item.swiped').forEach((item) => {
+      closeSwipeItem(item);
+    });
+
     // 标记已读（触发服务端 message_read 事件给对方）
     state.socket.emit('mark_read', { conversationId: convId });
 
@@ -1045,7 +1051,7 @@
     // 显示聊天区域
     el.chatEmpty.style.display = 'none';
     el.chatContent.style.display = 'flex';
-    el.chatContent.classList.add('mobile-show');
+    el.chatMain.classList.add('mobile-show');
 
     // 隐藏滚动到底部按钮
     hideScrollBottomBtn();
@@ -3278,7 +3284,7 @@
         state.messages = [];
         el.chatContent.style.display = 'none';
         el.chatEmpty.style.display = 'flex';
-        el.chatContent.classList.remove('mobile-show');
+        el.chatMain.classList.remove('mobile-show');
       }
 
       renderConversationList();
@@ -3832,6 +3838,21 @@
         moveModalTabIndicator(activeTab);
       }
     });
+
+    // V0.7 Fix: 手机端键盘弹出适配
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', () => {
+        const appLayout = document.querySelector('.app-layout');
+        if (appLayout) {
+          const offset = window.innerHeight - window.visualViewport.height;
+          if (offset > 100) {
+            appLayout.style.height = window.visualViewport.height + 'px';
+          } else {
+            appLayout.style.height = '100vh';
+          }
+        }
+      });
+    }
   }
 
   // ============================================================
