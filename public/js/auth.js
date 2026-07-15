@@ -1,6 +1,7 @@
 /**
- * Telegram FlashChat V0.66 - 认证页面逻辑（登录/注册）
+ * Telegram FlashChat V0.75 - 认证页面逻辑（登录/注册）
  * V0.6 新增：违禁词前端验证、注册后公告弹窗
+ * V0.75 新增：邀请码注册验证
  */
 
 (function () {
@@ -72,7 +73,13 @@
   function showError(elId, message) {
     const el = document.getElementById(elId);
     el.textContent = message || '';
+    // V0.75 新增：移除特殊样式类
+    el.classList.remove('error-special');
     if (message) {
+      // V0.75 新增：包含"妖猫"的错误信息使用特殊红色大字样式
+      if (message.indexOf('妖猫') !== -1) {
+        el.classList.add('error-special');
+      }
       el.classList.remove('shake');
       // 触发重排以重启动画
       void el.offsetWidth;
@@ -157,6 +164,7 @@
     const username = document.getElementById('reg-username').value.trim();
     const nickname = document.getElementById('reg-nickname').value.trim();
     const password = document.getElementById('reg-password').value;
+    const invitationCode = document.getElementById('reg-invite-code').value.trim();
 
     if (!username || !nickname || !password) {
       showError('register-error', '请填写所有字段');
@@ -182,7 +190,7 @@
       const res = await fetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password, nickname }),
+        body: JSON.stringify({ username, password, nickname, invitationCode }),
       });
       const data = await res.json();
 
