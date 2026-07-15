@@ -1,8 +1,9 @@
 /**
- * FlashChat Web V0.7 - 聊天主界面逻辑
+ * FlashChat Web V0.75 - 聊天主界面逻辑
  * Socket.IO 连接、消息收发、会话管理、UI 交互
  * V0.2 新增：emoji 面板、滚动到底部按钮、消息分组、已读回执、发送按钮图标切换、staggered 动画
  * V0.7 新增：主题切换、管理员上线通知、图片/表情/动图发送、左滑删除会话、手机端返回导航、会员系统、超管任命、关于页面
+ * V0.75 新增：消息提示音（Web Audio API）、邀请码管理系统
  */
 
 (function () {
@@ -262,6 +263,12 @@
     membershipColorPicker: document.getElementById('membership-color-picker'),
     membershipColorInput: document.getElementById('membership-color-input'),
     saveMembershipColorBtn: document.getElementById('save-membership-color-btn'),
+    // V0.75 新增：消息提示音开关
+    soundToggle: document.getElementById('sound-toggle'),
+    // V0.75 新增：邀请码管理
+    inviteCodeList: document.getElementById('invite-code-list'),
+    createInviteCodeBtn: document.getElementById('create-invite-code-btn'),
+    refreshInviteCodesBtn: document.getElementById('refresh-invite-codes-btn'),
   };
 
   // ============================================================
@@ -289,6 +296,66 @@
       throw new Error('认证已过期');
     }
     return res;
+  }
+
+  // ============================================================
+  // V0.75 新增：消息提示音（Web Audio API）
+  // ============================================================
+
+  /** 全局 AudioContext 实例（惰性创建） */
+  let audioCtx = null;
+
+  /** 获取或创建 AudioContext，自动 resume（浏览器自动暂停策略） */
+  function getAudioCtx() {
+    if (!audioCtx) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      audioCtx = new AC();
+    }
+    // 浏览器自动暂停策略：需要用户交互后 resume
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    return audioCtx;
+  }
+
+  /** 播放"叮咚"两音提示音（B5 + E6） */
+  function playNotificationSound() {
+    // 检查设置开关（默认开启）
+    if (localStorage.getItem('fc_sound_enabled') === 'false') return;
+    try {
+      var ctx = getAudioCtx();
+      if (!ctx) return;
+      var now = ctx.currentTime;
+
+      // 第一音：B5 (988 Hz)
+      var osc1 = ctx.createOscillator();
+      var gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(988, now);
+      gain1.gain.setValueAtTime(0, now);
+      gain1.gain.linearRampToValueAtTime(0.3, now + 0.02);
+      gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.3);
+
+      // 第二音：E6 (1319 Hz)
+      var osc2 = ctx.createOscillator();
+      var gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(1319, now + 0.15);
+      gain2.gain.setValueAtTime(0, now + 0.15);
+      gain2.gain.linearRampToValueAtTime(0.3, now + 0.17);
+      gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.15);
+      osc2.stop(now + 0.5);
+    } catch (e) {
+      console.warn('播放提示音失败:', e);
+    }
   }
 
   /** 获取姓名首字母（用于头像） */
@@ -1310,6 +1377,10 @@
 
   /** 处理新消息（来自 Socket.IO） */
   function handleNewMessage(message) {
+    // V0.75 新增：收到非自己发送的消息时播放提示音
+    if (message.senderId !== currentUser.id) {
+      playNotificationSound();
+    }
     if (message.conversationId === state.currentConvId) {
       state.messages.push(message);
       const prevMsg = state.messages.length >= 2 ? state.messages[state.messages.length - 2] : null;
@@ -2328,6 +2399,7 @@
     }
     if (tabName === 'admin') {
       loadAdminUsers();
+      loadInvitationCodes(); // V0.75: 加载邀请码列表
     }
   }
 
@@ -2696,6 +2768,119 @@
       }
       el.adminUserList.appendChild(item);
     });
+  }
+
+  // ============================================================
+  // V0.75 新增：邀请码管理
+  // ============================================================
+
+  /** 加载邀请码列表 */
+  async function loadInvitationCodes() {
+    try {
+      const res = await apiFetch('/api/admin/invitation-codes');
+      if (!res.ok) {
+        const err = await res.json();
+        showToast(err.error || '获取邀请码列表失败', 'error');
+        return;
+      }
+      const data = await res.json();
+      renderInvitationCodes(data.codes || []);
+    } catch (err) {
+      console.error('加载邀请码列表失败:', err);
+      showToast('加载邀请码列表失败', 'error');
+    }
+  }
+
+  /** 渲染邀请码列表 */
+  function renderInvitationCodes(codes) {
+    el.inviteCodeList.innerHTML = '';
+    if (!codes.length) {
+      el.inviteCodeList.innerHTML = '<p class="empty-hint">暂无邀请码</p>';
+      return;
+    }
+    codes.forEach(function(code) {
+      var item = document.createElement('div');
+      item.className = 'invite-code-item';
+
+      var info = document.createElement('div');
+      info.className = 'invite-code-info';
+
+      var codeText = document.createElement('div');
+      codeText.className = 'invite-code-text';
+      codeText.textContent = code.code;
+
+      var meta = document.createElement('div');
+      meta.className = 'invite-code-meta';
+      var statusText = code.status === 'used'
+        ? '已使用（' + (code.usedBy || '未知') + '）'
+        : '未使用';
+      meta.textContent = '创建者: ' + (code.createdBy || '未知') + ' · ' + statusText;
+
+      info.appendChild(codeText);
+      info.appendChild(meta);
+      item.appendChild(info);
+
+      var deleteBtn = document.createElement('button');
+      deleteBtn.className = 'icon-btn icon-btn-danger';
+      deleteBtn.title = '删除';
+      deleteBtn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>';
+      deleteBtn.addEventListener('click', function() {
+        deleteInviteCode(code.id, code.code);
+      });
+      item.appendChild(deleteBtn);
+
+      el.inviteCodeList.appendChild(item);
+    });
+  }
+
+  /** 生成新邀请码 */
+  async function createInviteCode() {
+    // V0.75: 管理员自己编邀请码
+    const input = document.getElementById('new-invite-code-input');
+    if (!input) return;
+    const code = input.value.trim();
+    if (!code) {
+      showToast('请输入邀请码', 'error');
+      return;
+    }
+    try {
+      const res = await apiFetch('/api/admin/invitation-codes', {
+        method: 'POST',
+        body: JSON.stringify({ code }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        showToast(err.error || '创建邀请码失败', 'error');
+        return;
+      }
+      const data = await res.json();
+      showToast('邀请码 "' + data.code.code + '" 已保存', 'success');
+      input.value = '';
+      loadInvitationCodes();
+    } catch (err) {
+      console.error('创建邀请码失败:', err);
+      showToast('创建邀请码失败', 'error');
+    }
+  }
+
+  /** 删除邀请码 */
+  async function deleteInviteCode(codeId, codeText) {
+    if (!confirm('确定要删除邀请码 ' + codeText + ' 吗？')) return;
+    try {
+      const res = await apiFetch('/api/admin/invitation-codes/' + codeId, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        showToast(err.error || '删除邀请码失败', 'error');
+        return;
+      }
+      showToast('邀请码已删除', 'success');
+      loadInvitationCodes();
+    } catch (err) {
+      console.error('删除邀请码失败:', err);
+      showToast('删除邀请码失败', 'error');
+    }
   }
 
   // ============================================================
@@ -3616,6 +3801,26 @@
     // V0.7 新增：保存会员颜色
     if (el.saveMembershipColorBtn) {
       el.saveMembershipColorBtn.addEventListener('click', saveMembershipColor);
+    }
+
+    // V0.75 新增：消息提示音开关
+    if (el.soundToggle) {
+      var soundEnabled = localStorage.getItem('fc_sound_enabled');
+      el.soundToggle.checked = soundEnabled !== 'false';
+      el.soundToggle.addEventListener('change', function() {
+        localStorage.setItem('fc_sound_enabled', el.soundToggle.checked ? 'true' : 'false');
+        if (el.soundToggle.checked) {
+          playNotificationSound();
+        }
+      });
+    }
+
+    // V0.75 新增：邀请码管理事件绑定
+    if (el.createInviteCodeBtn) {
+      el.createInviteCodeBtn.addEventListener('click', createInviteCode);
+    }
+    if (el.refreshInviteCodesBtn) {
+      el.refreshInviteCodesBtn.addEventListener('click', loadInvitationCodes);
     }
 
     // V0.2 新增：滚动到底部按钮点击
