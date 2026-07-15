@@ -1,8 +1,9 @@
 /**
- * FlashChat Web - 服务器入口 V0.7
+ * FlashChat Web - 服务器入口 V0.75
  * Express + Socket.IO + SQLite (better-sqlite3) + JWT 认证
  * V0.3 新增：完整好友系统（好友请求/接受/拒绝/删除、私聊需好友验证）
  * V0.7 新增：超管任命、管理员上线通知、图片/表情/动图发送、会员系统、会话置顶/删除、左滑操作
+ * V0.75 新增：邀请码注册系统（注册需邀请码验证，管理员面板可管理邀请码）
  *
  * 启动: node server.js
  * 访问: http://localhost:3000  /  http://<本机IP>:3000
@@ -24,7 +25,7 @@ const multer = require('multer');
 // ============================================================
 // 配置常量
 // ============================================================
-const APP_VERSION = 'v0.7';
+const APP_VERSION = 'v0.75';
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0'; // 监听所有网络接口，允许局域网访问
 const JWT_SECRET = process.env.JWT_SECRET || 'flashchat-secret-key-v0.2-please-change-in-production';
@@ -58,7 +59,7 @@ const BANNED_WORDS = [
 
 // V0.65 新增：软件公告内容
 const ANNOUNCEMENT = {
-  version: 'v0.7',
+  version: 'v0.75',
   title: 'Telegram FlashChat 公告',
   content: [
     '软件开发运营商 - Telegram FlashChat工作室',
@@ -190,6 +191,20 @@ db.exec(`
     reason TEXT NOT NULL,
     created_at TEXT NOT NULL
   );
+
+  -- V0.75 新增：邀请码表
+  CREATE TABLE IF NOT EXISTS invitation_codes (
+    id TEXT PRIMARY KEY,
+    code TEXT UNIQUE NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    used_by TEXT,
+    used_at TEXT,
+    status TEXT DEFAULT 'active'
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_invitation_codes_code ON invitation_codes(code);
+  CREATE INDEX IF NOT EXISTS idx_invitation_codes_status ON invitation_codes(status);
 `);
 
 // V0.6 新增：为 users 表添加新列（兼容已有数据库）
@@ -367,6 +382,16 @@ const stmts = {
 
   // V0.7 新增：删除会话（仅删除当前用户的成员关系，私聊则删除双方记录）
   deleteConversationForUser: db.prepare('DELETE FROM conversation_members WHERE conversation_id = ? AND user_id = ?'),
+
+  // V0.75 新增：邀请码
+  insertInvitationCode: db.prepare(
+    'INSERT INTO invitation_codes (id, code, created_by, created_at, status) VALUES (?, ?, ?, ?, ?)'
+  ),
+  getInvitationCode: db.prepare('SELECT * FROM invitation_codes WHERE code = ?'),
+  getInvitationCodeById: db.prepare('SELECT * FROM invitation_codes WHERE id = ?'),
+  getAllInvitationCodes: db.prepare('SELECT * FROM invitation_codes ORDER BY created_at DESC'),
+  deleteInvitationCode: db.prepare('DELETE FROM invitation_codes WHERE id = ?'),
+  useInvitationCode: db.prepare('UPDATE invitation_codes SET used_by = ?, used_at = ?, status = ? WHERE id = ?'),
 };
 
 // ============================================================
@@ -491,6 +516,16 @@ const imageUpload = multer({
 // ----- 工具函数 -----
 function pickAvatarColor() {
   return AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
+}
+
+// V0.75 新增：生成随机邀请码（8位大写字母+数字，排除易混淆字符）
+function generateInvitationCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 8; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
 }
 
 function nowISO() {
@@ -685,7 +720,7 @@ app.get('/api/announcement', (req, res) => {
 
 // 注册
 app.post('/api/register', (req, res) => {
-  const { username, password, nickname } = req.body || {};
+  const { username, password, nickname, invitationCode } = req.body || {};
   if (!username || !password || !nickname) {
     return res.status(400).json({ error: '用户名、密码和昵称不能为空' });
   }
@@ -709,6 +744,22 @@ app.post('/api/register', (req, res) => {
     }
   }
 
+  // V0.75 新增：邀请码验证（管理员除外）
+  const isAdminRegistration = !!ADMIN_USERNAME && username === ADMIN_USERNAME;
+  let validatedInvitationCode = null;
+  if (!isAdminRegistration) {
+    if (!invitationCode || !invitationCode.trim()) {
+      return res.status(400).json({ error: '你什么情况，没有邀请码还来用，妖猫怎么你了' });
+    }
+    validatedInvitationCode = stmts.getInvitationCode.get(invitationCode.trim());
+    if (!validatedInvitationCode) {
+      return res.status(400).json({ error: '邀请码无效' });
+    }
+    if (validatedInvitationCode.status === 'used') {
+      return res.status(400).json({ error: '该邀请码已被使用' });
+    }
+  }
+
   const existing = stmts.getUserByUsername.get(username);
   if (existing) {
     return res.status(409).json({ error: '该用户名已被注册' });
@@ -720,6 +771,11 @@ app.post('/api/register', (req, res) => {
   const createdAt = nowISO();
 
   stmts.insertUser.run(id, username, passwordHash, nickname, avatarColor, createdAt);
+
+  // V0.75 新增：标记邀请码已使用
+  if (!isAdminRegistration && validatedInvitationCode) {
+    stmts.useInvitationCode.run(id, createdAt, 'used', validatedInvitationCode.id);
+  }
 
   const user = stmts.getUserById.get(id);
   const token = signToken(id);
@@ -1344,6 +1400,65 @@ app.get('/api/warnings/:userId', authMiddleware, (req, res) => {
   const warnings = stmts.getWarningsByUser.all(userId);
   const count = stmts.getWarningCount.get(userId).cnt;
   res.json({ warnings, count });
+});
+
+// ============================================================
+// V0.75 新增：邀请码管理 API
+// ============================================================
+
+// 获取所有邀请码列表（管理员）
+app.get('/api/admin/invitation-codes', authMiddleware, (req, res) => {
+  if (!isAdmin(req.user)) {
+    return res.status(403).json({ error: '需要管理员权限' });
+  }
+  const codes = stmts.getAllInvitationCodes.all().map(c => {
+    const creator = stmts.getUserById.get(c.created_by);
+    const usedByUser = c.used_by ? stmts.getUserById.get(c.used_by) : null;
+    return {
+      id: c.id,
+      code: c.code,
+      createdBy: creator ? creator.nickname : '未知',
+      createdAt: c.created_at,
+      usedBy: usedByUser ? usedByUser.nickname : null,
+      usedAt: c.used_at || null,
+      status: c.status || 'active',
+    };
+  });
+  res.json({ codes });
+});
+
+// 创建邀请码（管理员自定义）
+app.post('/api/admin/invitation-codes', authMiddleware, (req, res) => {
+  if (!isAdmin(req.user)) {
+    return res.status(403).json({ error: '需要管理员权限' });
+  }
+  // V0.75: 管理员自己编邀请码
+  const { code } = req.body || {};
+  if (!code || code.trim().length < 2) {
+    return res.status(400).json({ error: '邀请码至少2个字符' });
+  }
+  const trimmedCode = code.trim();
+  // 检查是否已存在
+  if (stmts.getInvitationCode.get(trimmedCode)) {
+    return res.status(400).json({ error: '这个邀请码已存在，换一个吧' });
+  }
+  const id = uuidv4();
+  const createdAt = nowISO();
+  stmts.insertInvitationCode.run(id, trimmedCode, req.user.id, createdAt, 'active');
+  res.json({ ok: true, code: { id, code: trimmedCode, createdAt, status: 'active' } });
+});
+
+// 删除邀请码（管理员）
+app.delete('/api/admin/invitation-codes/:id', authMiddleware, (req, res) => {
+  if (!isAdmin(req.user)) {
+    return res.status(403).json({ error: '需要管理员权限' });
+  }
+  const inviteCode = stmts.getInvitationCodeById.get(req.params.id);
+  if (!inviteCode) {
+    return res.status(404).json({ error: '邀请码不存在' });
+  }
+  stmts.deleteInvitationCode.run(req.params.id);
+  res.json({ ok: true, message: '邀请码已删除' });
 });
 
 // 音乐建议 - 提交
