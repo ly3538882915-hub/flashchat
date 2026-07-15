@@ -1715,6 +1715,8 @@ input, textarea {
     min-width: 100%;
     position: absolute;
     inset: 0;
+    overflow: hidden;
+    z-index: 10;
     /* 移动端滑入动画 */
     transition: transform 0.3s var(--easing-smooth);
   }
@@ -1725,11 +1727,14 @@ input, textarea {
     z-index: 5;
     transform: translateX(100%);
     transition: transform 0.3s var(--easing-smooth);
+    overflow: hidden;
+    pointer-events: none;
   }
 
   .chat-main.mobile-show {
     transform: translateX(0);
     z-index: 15;
+    pointer-events: auto;
   }
 
   .back-btn {
@@ -3752,6 +3757,10 @@ body.modal-open {
   transition: transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
+.conversation-item.swiped {
+  transform: translateX(-140px);
+}
+
 .swipe-actions {
   position: absolute;
   right: 0;
@@ -3857,6 +3866,7 @@ body.modal-open {
     min-width: 100%;
     position: absolute;
     inset: 0;
+    overflow: hidden;
     z-index: 10;
   }
 
@@ -3865,11 +3875,14 @@ body.modal-open {
     inset: 0;
     z-index: 5;
     transform: translateX(100%);
+    overflow: hidden;
+    pointer-events: none;
   }
 
   .chat-main.mobile-show {
     transform: translateX(0);
     z-index: 15;
+    pointer-events: auto;
   }
 
   /* 左滑操作在手机端启用 */
